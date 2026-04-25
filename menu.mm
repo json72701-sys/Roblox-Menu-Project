@@ -13,8 +13,23 @@ static CAMetalLayer *g_metalLayer = nil;
 static MTLRenderPassDescriptor *g_renderPassDescriptor = nil;
 static CADisplayLink *g_displayLink = nil;
 
+// Keyboard support
+static UITextField *g_hiddenTextField = nil;
+static bool g_wantKeyboard = false;
+static bool g_keyboardOpen = false;
+
+// Color customization (user-editable from Settings tab)
+static ImVec4 g_colText       = ImVec4(0.90f, 0.93f, 1.00f, 1.00f);
+static ImVec4 g_colWindowBg   = ImVec4(0.06f, 0.06f, 0.12f, 0.97f);
+static ImVec4 g_colButton     = ImVec4(0.15f, 0.35f, 0.65f, 0.85f);
+static ImVec4 g_colBorder     = ImVec4(0.25f, 0.50f, 0.85f, 0.40f);
+static ImVec4 g_colTitleBg    = ImVec4(0.15f, 0.35f, 0.65f, 1.00f);
+static ImVec4 g_colTab        = ImVec4(0.20f, 0.45f, 0.80f, 1.00f);
+static ImVec4 g_colFrameBg    = ImVec4(0.10f, 0.10f, 0.18f, 0.90f);
+static ImVec4 g_colAccent     = ImVec4(0.40f, 0.80f, 1.00f, 1.00f);
+
 // Touch overlay view that forwards touch events to ImGui
-@interface ImGuiTouchView : UIView
+@interface ImGuiTouchView : UIView <UITextFieldDelegate>
 @end
 
 @implementation ImGuiTouchView
@@ -40,11 +55,38 @@ static CADisplayLink *g_displayLink = nil;
     ImGuiIO &io = ImGui::GetIO();
     io.AddMousePosEvent(loc.x, loc.y);
     io.AddMouseButtonEvent(0, false);
+
+    // Check if ImGui wants keyboard (user tapped an input field)
+    if (io.WantTextInput && !g_keyboardOpen) {
+        g_wantKeyboard = true;
+    }
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     ImGuiIO &io = ImGui::GetIO();
     io.AddMouseButtonEvent(0, false);
+}
+
+- (BOOL)canBecomeFirstResponder { return YES; }
+
+- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range
+    replacementString:(NSString *)string {
+    ImGuiIO &io = ImGui::GetIO();
+    if ([string length] > 0) {
+        const char *utf8 = [string UTF8String];
+        io.AddInputCharactersUTF8(utf8);
+    } else if (range.length > 0) {
+        io.AddKeyEvent(ImGuiKey_Backspace, true);
+        io.AddKeyEvent(ImGuiKey_Backspace, false);
+    }
+    return NO;
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    ImGuiIO &io = ImGui::GetIO();
+    io.AddKeyEvent(ImGuiKey_Enter, true);
+    io.AddKeyEvent(ImGuiKey_Enter, false);
+    return NO;
 }
 
 @end
@@ -56,6 +98,72 @@ static ScriptExecFunc g_scriptExecCallback = nullptr;
 
 extern "C" void ElxrScriptz_SetExecuteCallback(ScriptExecFunc callback) {
     g_scriptExecCallback = callback;
+}
+
+static void ApplyCustomColors() {
+    ImVec4 *c = ImGui::GetStyle().Colors;
+
+    c[ImGuiCol_Text]         = g_colText;
+    c[ImGuiCol_TextDisabled] = ImVec4(g_colText.x * 0.5f, g_colText.y * 0.5f,
+                                       g_colText.z * 0.5f, 1.0f);
+
+    c[ImGuiCol_WindowBg] = g_colWindowBg;
+    c[ImGuiCol_ChildBg]  = ImVec4(g_colWindowBg.x + 0.02f, g_colWindowBg.y + 0.02f,
+                                   g_colWindowBg.z + 0.02f, 0.90f);
+    c[ImGuiCol_PopupBg]  = g_colWindowBg;
+
+    c[ImGuiCol_TitleBg]       = ImVec4(g_colTitleBg.x * 0.65f, g_colTitleBg.y * 0.65f,
+                                        g_colTitleBg.z * 0.65f, 1.0f);
+    c[ImGuiCol_TitleBgActive] = g_colTitleBg;
+
+    c[ImGuiCol_Border]       = g_colBorder;
+    c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
+
+    c[ImGuiCol_Button]        = g_colButton;
+    c[ImGuiCol_ButtonHovered] = ImVec4(g_colButton.x + 0.10f, g_colButton.y + 0.15f,
+                                        g_colButton.z + 0.20f, 1.0f);
+    c[ImGuiCol_ButtonActive]  = ImVec4(g_colButton.x - 0.05f, g_colButton.y - 0.05f,
+                                        g_colButton.z - 0.10f, 1.0f);
+
+    c[ImGuiCol_FrameBg]        = g_colFrameBg;
+    c[ImGuiCol_FrameBgHovered] = ImVec4(g_colFrameBg.x + 0.05f, g_colFrameBg.y + 0.05f,
+                                         g_colFrameBg.z + 0.07f, 1.0f);
+    c[ImGuiCol_FrameBgActive]  = ImVec4(g_colFrameBg.x + 0.02f, g_colFrameBg.y + 0.02f,
+                                         g_colFrameBg.z + 0.04f, 1.0f);
+
+    c[ImGuiCol_Tab]               = ImVec4(g_colTab.x * 0.6f, g_colTab.y * 0.6f,
+                                            g_colTab.z * 0.6f, 0.80f);
+    c[ImGuiCol_TabSelected]       = g_colTab;
+    c[ImGuiCol_TabHovered]        = ImVec4(g_colTab.x + 0.05f, g_colTab.y + 0.05f,
+                                            g_colTab.z + 0.05f, 0.90f);
+    c[ImGuiCol_TabDimmed]         = ImVec4(g_colTab.x * 0.4f, g_colTab.y * 0.4f,
+                                            g_colTab.z * 0.4f, 0.70f);
+    c[ImGuiCol_TabDimmedSelected] = ImVec4(g_colTab.x * 0.75f, g_colTab.y * 0.75f,
+                                            g_colTab.z * 0.75f, 1.0f);
+
+    c[ImGuiCol_SliderGrab]       = g_colAccent;
+    c[ImGuiCol_SliderGrabActive] = ImVec4(g_colAccent.x + 0.1f, g_colAccent.y + 0.1f,
+                                           g_colAccent.z + 0.1f, 1.0f);
+    c[ImGuiCol_CheckMark]        = g_colAccent;
+
+    c[ImGuiCol_ScrollbarBg]          = ImVec4(g_colWindowBg.x, g_colWindowBg.y,
+                                               g_colWindowBg.z, 0.50f);
+    c[ImGuiCol_ScrollbarGrab]        = ImVec4(g_colAccent.x * 0.5f, g_colAccent.y * 0.5f,
+                                               g_colAccent.z * 0.5f, 0.60f);
+    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(g_colAccent.x * 0.6f, g_colAccent.y * 0.6f,
+                                               g_colAccent.z * 0.6f, 0.80f);
+    c[ImGuiCol_ScrollbarGrabActive]  = g_colAccent;
+
+    c[ImGuiCol_Header]        = ImVec4(g_colButton.x, g_colButton.y, g_colButton.z, 0.70f);
+    c[ImGuiCol_HeaderHovered] = ImVec4(g_colButton.x + 0.05f, g_colButton.y + 0.05f,
+                                        g_colButton.z + 0.05f, 0.80f);
+    c[ImGuiCol_HeaderActive]  = ImVec4(g_colButton.x + 0.10f, g_colButton.y + 0.15f,
+                                        g_colButton.z + 0.20f, 1.0f);
+
+    c[ImGuiCol_Separator]        = g_colBorder;
+    c[ImGuiCol_SeparatorHovered] = ImVec4(g_colBorder.x + 0.05f, g_colBorder.y + 0.1f,
+                                           g_colBorder.z + 0.15f, 0.70f);
+    c[ImGuiCol_SeparatorActive]  = g_colAccent;
 }
 
 static void SetupImGuiStyle() {
@@ -75,52 +183,7 @@ static void SetupImGuiStyle() {
     style.FrameBorderSize = 0.0f;
     style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
 
-    ImVec4 *c = style.Colors;
-
-    c[ImGuiCol_WindowBg]   = ImVec4(0.06f, 0.06f, 0.12f, 0.97f);
-    c[ImGuiCol_ChildBg]    = ImVec4(0.08f, 0.08f, 0.14f, 0.90f);
-    c[ImGuiCol_PopupBg]    = ImVec4(0.08f, 0.08f, 0.14f, 0.97f);
-
-    c[ImGuiCol_TitleBg]       = ImVec4(0.10f, 0.20f, 0.40f, 1.00f);
-    c[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.35f, 0.65f, 1.00f);
-
-    c[ImGuiCol_Border]        = ImVec4(0.25f, 0.50f, 0.85f, 0.40f);
-    c[ImGuiCol_BorderShadow]  = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-
-    c[ImGuiCol_Button]        = ImVec4(0.15f, 0.35f, 0.65f, 0.85f);
-    c[ImGuiCol_ButtonHovered]  = ImVec4(0.25f, 0.50f, 0.85f, 1.00f);
-    c[ImGuiCol_ButtonActive]   = ImVec4(0.10f, 0.30f, 0.55f, 1.00f);
-
-    c[ImGuiCol_FrameBg]        = ImVec4(0.10f, 0.10f, 0.18f, 0.90f);
-    c[ImGuiCol_FrameBgHovered] = ImVec4(0.15f, 0.15f, 0.25f, 1.00f);
-    c[ImGuiCol_FrameBgActive]  = ImVec4(0.12f, 0.12f, 0.22f, 1.00f);
-
-    c[ImGuiCol_Tab]                = ImVec4(0.12f, 0.25f, 0.45f, 0.80f);
-    c[ImGuiCol_TabSelected]        = ImVec4(0.20f, 0.45f, 0.80f, 1.00f);
-    c[ImGuiCol_TabHovered]         = ImVec4(0.25f, 0.50f, 0.85f, 0.90f);
-    c[ImGuiCol_TabDimmed]          = ImVec4(0.08f, 0.15f, 0.30f, 0.70f);
-    c[ImGuiCol_TabDimmedSelected]  = ImVec4(0.15f, 0.30f, 0.55f, 1.00f);
-
-    c[ImGuiCol_SliderGrab]       = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
-    c[ImGuiCol_SliderGrabActive] = ImVec4(0.40f, 0.65f, 1.00f, 1.00f);
-
-    c[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.75f, 1.00f, 1.00f);
-
-    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.05f, 0.05f, 0.10f, 0.50f);
-    c[ImGuiCol_ScrollbarGrab]        = ImVec4(0.20f, 0.40f, 0.70f, 0.60f);
-    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.25f, 0.50f, 0.85f, 0.80f);
-    c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
-
-    c[ImGuiCol_Header]        = ImVec4(0.15f, 0.30f, 0.55f, 0.70f);
-    c[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.40f, 0.70f, 0.80f);
-    c[ImGuiCol_HeaderActive]  = ImVec4(0.25f, 0.50f, 0.85f, 1.00f);
-
-    c[ImGuiCol_Separator]        = ImVec4(0.20f, 0.40f, 0.70f, 0.40f);
-    c[ImGuiCol_SeparatorHovered] = ImVec4(0.25f, 0.50f, 0.85f, 0.70f);
-    c[ImGuiCol_SeparatorActive]  = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
-
-    c[ImGuiCol_Text]         = ImVec4(0.90f, 0.93f, 1.00f, 1.00f);
-    c[ImGuiCol_TextDisabled] = ImVec4(0.45f, 0.50f, 0.60f, 1.00f);
+    ApplyCustomColors();
 }
 
 static UIWindow *GetKeyWindow() {
@@ -173,6 +236,15 @@ static void InitImGui() {
     g_touchView.hidden = YES;
     [rootView addSubview:g_touchView];
 
+    // Hidden text field for keyboard input
+    g_hiddenTextField = [[UITextField alloc] initWithFrame:CGRectMake(0, -100, 1, 1)];
+    g_hiddenTextField.autocorrectionType = UITextAutocorrectionTypeNo;
+    g_hiddenTextField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    g_hiddenTextField.spellCheckingType = UITextSpellCheckingTypeNo;
+    g_hiddenTextField.delegate = g_touchView;
+    g_hiddenTextField.text = @" ";
+    [g_touchView addSubview:g_hiddenTextField];
+
     g_renderPassDescriptor = [MTLRenderPassDescriptor new];
 
     ImGui::CreateContext();
@@ -180,9 +252,6 @@ static void InitImGui() {
     io.IniFilename = nullptr;
     io.DisplaySize = ImVec2(screenBounds.size.width, screenBounds.size.height);
     io.DisplayFramebufferScale = ImVec2((float)scale, (float)scale);
-
-    NSLog(@"[ElxrScriptz] Screen: %.0fx%.0f scale:%.0f",
-          screenBounds.size.width, screenBounds.size.height, scale);
 
     ImGui_ImplMetal_Init(g_device);
     SetupImGuiStyle();
@@ -215,6 +284,9 @@ static void DrawMenu() {
         g_needsCenter = false;
     }
 
+    // Apply user color choices every frame
+    ApplyCustomColors();
+
     ImGui::Begin("ElxrScriptz Executor", nullptr,
                  ImGuiWindowFlags_NoCollapse);
 
@@ -224,9 +296,10 @@ static void DrawMenu() {
 
     if (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_FittingPolicyResizeDown)) {
 
+        // --- Execute Tab ---
         if (ImGui::BeginTabItem("Execute")) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Paste or type your script:");
+            ImGui::TextColored(g_colAccent, "Paste or type your script:");
             ImGui::Spacing();
 
             float textBoxH = ImGui::GetContentRegionAvail().y - 80;
@@ -234,6 +307,11 @@ static void DrawMenu() {
             ImGui::InputTextMultiline("##scriptbox", scriptBuf, sizeof(scriptBuf),
                                       ImVec2(-1, textBoxH),
                                       ImGuiInputTextFlags_AllowTabInput);
+
+            // Show keyboard when text input is active
+            if (ImGui::IsItemActive() && !g_keyboardOpen) {
+                g_wantKeyboard = true;
+            }
 
             ImGui::Spacing();
 
@@ -243,10 +321,10 @@ static void DrawMenu() {
                 if (scriptBuf[0] != '\0') {
                     if (g_scriptExecCallback) {
                         g_scriptExecCallback(scriptBuf);
-                        snprintf(statusMsg, sizeof(statusMsg), "Script executed.");
+                        snprintf(statusMsg, sizeof(statusMsg), "Script sent!");
                     } else {
                         snprintf(statusMsg, sizeof(statusMsg),
-                                 "No script engine connected.");
+                                 "Ready — hook your engine via SetExecuteCallback.");
                     }
                 } else {
                     snprintf(statusMsg, sizeof(statusMsg), "Script box is empty.");
@@ -288,48 +366,53 @@ static void DrawMenu() {
             ImGui::EndTabItem();
         }
 
+        // --- Settings Tab (Color Customizer) ---
         if (ImGui::BeginTabItem("Settings")) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Player Settings");
+            ImGui::TextColored(g_colAccent, "Color Customizer");
             ImGui::Separator();
             ImGui::Spacing();
 
-            static float walkSpeed = 16.0f;
-            static float jumpPower = 50.0f;
-            static float gravity = 196.2f;
-
-            ImGui::SliderFloat("Walk Speed", &walkSpeed, 0.0f, 500.0f, "%.0f");
-            ImGui::SliderFloat("Jump Power", &jumpPower, 0.0f, 500.0f, "%.0f");
-            ImGui::SliderFloat("Gravity", &gravity, 0.0f, 1000.0f, "%.1f");
+            ImGui::ColorEdit4("Text Color",         (float *)&g_colText,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Background",          (float *)&g_colWindowBg,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Buttons",             (float *)&g_colButton,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Borders",             (float *)&g_colBorder,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Title Bar",           (float *)&g_colTitleBg,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Tabs",                (float *)&g_colTab,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Input Fields",        (float *)&g_colFrameBg,
+                              ImGuiColorEditFlags_NoInputs);
+            ImGui::ColorEdit4("Accent / Highlights", (float *)&g_colAccent,
+                              ImGuiColorEditFlags_NoInputs);
 
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Visual Settings");
             ImGui::Separator();
             ImGui::Spacing();
 
-            static bool espEnabled = false;
-            static bool fullbright = false;
-            static bool noclip = false;
-            static bool infiniteJump = false;
-
-            ImGui::Checkbox("ESP", &espEnabled);
-            ImGui::Checkbox("Fullbright", &fullbright);
-            ImGui::Checkbox("Noclip", &noclip);
-            ImGui::Checkbox("Infinite Jump", &infiniteJump);
-
-            ImGui::Spacing();
-            if (ImGui::Button("Apply Settings", ImVec2(-1, 32))) {
-                snprintf(statusMsg, sizeof(statusMsg), "Settings applied.");
-                statusTimer = 2.0f;
+            if (ImGui::Button("Reset to Default", ImVec2(-1, 32))) {
+                g_colText     = ImVec4(0.90f, 0.93f, 1.00f, 1.00f);
+                g_colWindowBg = ImVec4(0.06f, 0.06f, 0.12f, 0.97f);
+                g_colButton   = ImVec4(0.15f, 0.35f, 0.65f, 0.85f);
+                g_colBorder   = ImVec4(0.25f, 0.50f, 0.85f, 0.40f);
+                g_colTitleBg  = ImVec4(0.15f, 0.35f, 0.65f, 1.00f);
+                g_colTab      = ImVec4(0.20f, 0.45f, 0.80f, 1.00f);
+                g_colFrameBg  = ImVec4(0.10f, 0.10f, 0.18f, 0.90f);
+                g_colAccent   = ImVec4(0.40f, 0.80f, 1.00f, 1.00f);
             }
 
             ImGui::EndTabItem();
         }
 
+        // --- Info Tab ---
         if (ImGui::BeginTabItem("Info")) {
             ImGui::Spacing();
 
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ElxrScriptz Executor");
+            ImGui::TextColored(g_colAccent, "ElxrScriptz Executor");
             ImGui::Separator();
             ImGui::Spacing();
 
@@ -341,8 +424,8 @@ static void DrawMenu() {
             ImGui::Spacing();
             ImGui::TextWrapped(
                 "Tap the floating ElxrScriptz button to toggle this menu. "
-                "Drag it to reposition. Use the Execute tab to run scripts "
-                "and the Settings tab to configure options."
+                "Drag the title bar to reposition. Use the Execute tab to "
+                "run scripts and Settings to customize colors."
             );
 
             ImGui::EndTabItem();
@@ -352,6 +435,18 @@ static void DrawMenu() {
     }
 
     ImGui::End();
+
+    // Handle keyboard show/hide
+    if (g_wantKeyboard) {
+        g_hiddenTextField.text = @" ";
+        [g_hiddenTextField becomeFirstResponder];
+        g_keyboardOpen = true;
+        g_wantKeyboard = false;
+    }
+    if (!ImGui::GetIO().WantTextInput && g_keyboardOpen) {
+        [g_hiddenTextField resignFirstResponder];
+        g_keyboardOpen = false;
+    }
 }
 
 static void RenderFrame() {
@@ -407,6 +502,10 @@ extern "C" void RenderImGuiMenu(bool visible) {
             } else {
                 g_metalLayer.hidden = YES;
                 g_touchView.hidden = YES;
+                if (g_keyboardOpen) {
+                    [g_hiddenTextField resignFirstResponder];
+                    g_keyboardOpen = false;
+                }
             }
         }
     });
