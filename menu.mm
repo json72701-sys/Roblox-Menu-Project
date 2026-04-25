@@ -145,11 +145,13 @@ static void InitImGui() {
 static bool g_needsCenter = true;
 
 static void DrawMenu() {
-    const float winW = 340.0f;
-    const float winH = 440.0f;
+    ImVec2 display = ImGui::GetIO().DisplaySize;
+    float winW = display.x * 0.85f;
+    if (winW > 340.0f) winW = 340.0f;
+    float winH = display.y * 0.65f;
+    if (winH > 440.0f) winH = 440.0f;
 
     if (g_needsCenter) {
-        ImVec2 display = ImGui::GetIO().DisplaySize;
         ImGui::SetNextWindowPos(
             ImVec2((display.x - winW) * 0.5f, (display.y - winH) * 0.5f),
             ImGuiCond_Always
@@ -337,6 +339,7 @@ extern "C" void RenderImGuiMenu(bool visible) {
         InitImGui();
         if (g_initialized) {
             g_metalLayer.hidden = NO;
+            g_needsCenter = true;
             RenderFrame();
         }
     });
