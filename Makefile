@@ -5,7 +5,6 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = ElxrScriptz
 
-# This tells the compiler to grab your main code and your UD logic
 ElxrScriptz_FILES = main.mm Methods/DataModel.cpp
 ElxrScriptz_FRAMEWORKS = UIKit Foundation Security
 ElxrScriptz_CFLAGS = -fobjc-arc -I./Include -I./Methods -I./Structures
