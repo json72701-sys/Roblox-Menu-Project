@@ -22,6 +22,7 @@ jobs:
           -framework Metal \
           -framework Foundation \
           -framework QuartzCore \
+          -framework CoreGraphics \
           -std=c++17 \
           -o MyExecutor.dylib $(cat files.txt)
       - name: Save Result
