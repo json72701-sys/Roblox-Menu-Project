@@ -41,12 +41,12 @@ static void ExecuteCurrentScript() {
         return;
     }
 
-    // Now execute (compile + inject)
+    // Execute with elevated identity, full capabilities, and sandbox bypass
     bool success = Executor::ExecuteScript(dm, source, error);
     if (success) {
-        statusLabel.text = @"Script executed!";
+        statusLabel.text = @"Executed (Identity 8 | Full Caps | Unsandboxed)";
         statusLabel.textColor = [UIColor greenColor];
-        NSLog(@"[ElxrScriptz] Script executed successfully (%zu bytes bytecode)", bytecode.size());
+        NSLog(@"[ElxrScriptz] Script executed with elevated privileges (%zu bytes bytecode)", bytecode.size());
     } else {
         NSString *errStr = [NSString stringWithUTF8String:error.c_str()];
         statusLabel.text = [NSString stringWithFormat:@"Error: %@", errStr];
