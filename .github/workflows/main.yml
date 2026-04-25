@@ -18,6 +18,12 @@ jobs:
           -miphoneos-version-min=14.0 \
           -fobjc-arc \
           -I. \
+          -Iluau/VM/include \
+          -Iluau/VM/src \
+          -Iluau/Compiler/include \
+          -Iluau/Ast/include \
+          -Iluau/Bytecode/include \
+          -Iluau/Common/include \
           -framework UIKit \
           -framework Metal \
           -framework Foundation \

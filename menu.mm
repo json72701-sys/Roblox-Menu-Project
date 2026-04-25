@@ -5,6 +5,10 @@
 #include "imgui.h"
 #include "imgui_impl_metal.h"
 
+#include "lua.h"
+#include "lualib.h"
+#include "luacode.h"
+
 static bool g_initialized = false;
 static bool g_menuVisible = false;
 static id<MTLDevice> g_device = nil;
@@ -17,6 +21,99 @@ static CADisplayLink *g_displayLink = nil;
 static UITextField *g_hiddenTextField = nil;
 static bool g_wantKeyboard = false;
 static bool g_keyboardOpen = false;
+
+// Luau VM
+static lua_State *g_luauState = nullptr;
+
+// Output log for script results
+static char g_outputLog[8192] = "";
+static int g_outputLen = 0;
+
+static void AppendOutput(const char *text) {
+    int len = (int)strlen(text);
+    if (g_outputLen + len + 1 >= (int)sizeof(g_outputLog)) {
+        // Shift buffer: keep last half
+        int keep = (int)sizeof(g_outputLog) / 2;
+        memmove(g_outputLog, g_outputLog + g_outputLen - keep, keep);
+        g_outputLen = keep;
+    }
+    memcpy(g_outputLog + g_outputLen, text, len);
+    g_outputLen += len;
+    g_outputLog[g_outputLen] = '\0';
+}
+
+static int LuauPrint(lua_State *L) {
+    int n = lua_gettop(L);
+    for (int i = 1; i <= n; i++) {
+        size_t len;
+        const char *s = luaL_tolstring(L, i, &len);
+        if (s) {
+            if (i > 1) AppendOutput("\t");
+            AppendOutput(s);
+        }
+        lua_pop(L, 1);
+    }
+    AppendOutput("\n");
+    return 0;
+}
+
+static int LuauWarn(lua_State *L) {
+    const char *msg = luaL_checkstring(L, 1);
+    AppendOutput("[warn] ");
+    AppendOutput(msg);
+    AppendOutput("\n");
+    return 0;
+}
+
+static void InitLuau() {
+    if (g_luauState) return;
+    g_luauState = luaL_newstate();
+    luaL_openlibs(g_luauState);
+
+    // Register custom print
+    lua_pushcfunction(g_luauState, LuauPrint, "print");
+    lua_setglobal(g_luauState, "print");
+
+    lua_pushcfunction(g_luauState, LuauWarn, "warn");
+    lua_setglobal(g_luauState, "warn");
+}
+
+static void ExecuteLuauScript(const char *script) {
+    if (!g_luauState) InitLuau();
+
+    lua_CompileOptions opts = {};
+    opts.optimizationLevel = 1;
+    opts.debugLevel = 1;
+
+    size_t bytecodeSize = 0;
+    char *bytecode = luau_compile(script, strlen(script), &opts, &bytecodeSize);
+
+    if (!bytecode) {
+        AppendOutput("[error] Compilation failed\n");
+        return;
+    }
+
+    int loadResult = luau_load(g_luauState, "=ElxrScriptz", bytecode, bytecodeSize, 0);
+    free(bytecode);
+
+    if (loadResult != 0) {
+        const char *err = lua_tostring(g_luauState, -1);
+        AppendOutput("[error] ");
+        AppendOutput(err ? err : "Unknown load error");
+        AppendOutput("\n");
+        lua_pop(g_luauState, 1);
+        return;
+    }
+
+    int status = lua_pcall(g_luauState, 0, 0, 0);
+    if (status != 0) {
+        const char *err = lua_tostring(g_luauState, -1);
+        AppendOutput("[error] ");
+        AppendOutput(err ? err : "Unknown runtime error");
+        AppendOutput("\n");
+        lua_pop(g_luauState, 1);
+    }
+}
 
 // Color customization (user-editable from Settings tab)
 static ImVec4 g_colText       = ImVec4(0.90f, 0.93f, 1.00f, 1.00f);
@@ -321,11 +418,10 @@ static void DrawMenu() {
                 if (scriptBuf[0] != '\0') {
                     if (g_scriptExecCallback) {
                         g_scriptExecCallback(scriptBuf);
-                        snprintf(statusMsg, sizeof(statusMsg), "Script sent!");
                     } else {
-                        snprintf(statusMsg, sizeof(statusMsg),
-                                 "Ready — hook your engine via SetExecuteCallback.");
+                        ExecuteLuauScript(scriptBuf);
                     }
+                    snprintf(statusMsg, sizeof(statusMsg), "Script executed.");
                 } else {
                     snprintf(statusMsg, sizeof(statusMsg), "Script box is empty.");
                 }
@@ -361,6 +457,20 @@ static void DrawMenu() {
                 ImGui::TextColored(ImVec4(0.5f, 0.9f, 0.5f, statusTimer / 3.0f),
                                    "%s", statusMsg);
                 statusTimer -= ImGui::GetIO().DeltaTime;
+            }
+
+            // Output log
+            if (g_outputLen > 0) {
+                ImGui::Spacing();
+                ImGui::TextColored(g_colAccent, "Output:");
+                ImGui::BeginChild("##output", ImVec2(-1, 80), true);
+                ImGui::TextWrapped("%s", g_outputLog);
+                ImGui::SetScrollHereY(1.0f);
+                ImGui::EndChild();
+                if (ImGui::Button("Clear Output", ImVec2(-1, 24))) {
+                    g_outputLog[0] = '\0';
+                    g_outputLen = 0;
+                }
             }
 
             ImGui::EndTabItem();
