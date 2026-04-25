@@ -13,19 +13,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: 'latest-shipping'
-
       - name: Compile Dylib
         run: |
-          # Define the SDK path for iOS
+          # Use the default SDK path available on the runner
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # Compile all .cpp (ImGui/Logic) and .mm (UIKit/Main) files
-          # -I. tells the compiler to look for headers in the current directory
-          # -framework flags link the necessary iOS graphics and UI libraries
+          # Compiling with standard flags for iOS arm64
           clang++ -dynamiclib -arch arm64 \
             -isysroot "$SDK_PATH" \
             -miphoneos-version-min=14.0 \
