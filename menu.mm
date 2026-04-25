@@ -150,7 +150,7 @@ static void DrawMenu() {
     );
 
     ImGui::Begin("ElxrScriptz Executor", nullptr,
-                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+                 ImGuiWindowFlags_NoCollapse);
 
     static char scriptBuf[16384] = "";
     static char statusMsg[256] = "";
@@ -318,12 +318,17 @@ static void RenderFrame() {
 }
 
 extern "C" void RenderImGuiMenu(bool visible) {
-    if (!visible)
-        return;
-
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (!visible) {
+            if (g_metalLayer)
+                g_metalLayer.hidden = YES;
+            return;
+        }
+
         InitImGui();
-        if (g_initialized)
+        if (g_initialized) {
+            g_metalLayer.hidden = NO;
             RenderFrame();
+        }
     });
 }
