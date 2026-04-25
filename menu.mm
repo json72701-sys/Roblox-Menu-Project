@@ -13,6 +13,44 @@ static CAMetalLayer *g_metalLayer = nil;
 static MTLRenderPassDescriptor *g_renderPassDescriptor = nil;
 static CADisplayLink *g_displayLink = nil;
 
+// Touch overlay view that forwards touch events to ImGui
+@interface ImGuiTouchView : UIView
+@end
+
+@implementation ImGuiTouchView
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInView:self];
+    ImGuiIO &io = ImGui::GetIO();
+    io.AddMousePosEvent(loc.x, loc.y);
+    io.AddMouseButtonEvent(0, true);
+}
+
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInView:self];
+    ImGuiIO &io = ImGui::GetIO();
+    io.AddMousePosEvent(loc.x, loc.y);
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInView:self];
+    ImGuiIO &io = ImGui::GetIO();
+    io.AddMousePosEvent(loc.x, loc.y);
+    io.AddMouseButtonEvent(0, false);
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    ImGuiIO &io = ImGui::GetIO();
+    io.AddMouseButtonEvent(0, false);
+}
+
+@end
+
+static ImGuiTouchView *g_touchView = nil;
+
 typedef void (*ScriptExecFunc)(const char *script);
 static ScriptExecFunc g_scriptExecCallback = nullptr;
 
@@ -124,7 +162,16 @@ static void InitImGui() {
     );
     g_metalLayer.opaque = NO;
     g_metalLayer.hidden = YES;
-    [window.rootViewController.view.layer addSublayer:g_metalLayer];
+
+    UIView *rootView = window.rootViewController.view;
+    [rootView.layer addSublayer:g_metalLayer];
+
+    g_touchView = [[ImGuiTouchView alloc] initWithFrame:screenBounds];
+    g_touchView.backgroundColor = [UIColor clearColor];
+    g_touchView.multipleTouchEnabled = YES;
+    g_touchView.userInteractionEnabled = YES;
+    g_touchView.hidden = YES;
+    [rootView addSubview:g_touchView];
 
     g_renderPassDescriptor = [MTLRenderPassDescriptor new];
 
@@ -316,6 +363,7 @@ static void RenderFrame() {
         screenBounds.size.width * scale,
         screenBounds.size.height * scale
     );
+    g_touchView.frame = screenBounds;
     ImGuiIO &io = ImGui::GetIO();
     io.DisplaySize = ImVec2(screenBounds.size.width, screenBounds.size.height);
     io.DisplayFramebufferScale = ImVec2((float)scale, (float)scale);
@@ -354,9 +402,11 @@ extern "C" void RenderImGuiMenu(bool visible) {
         if (g_initialized) {
             if (visible) {
                 g_metalLayer.hidden = NO;
+                g_touchView.hidden = NO;
                 g_needsCenter = true;
             } else {
                 g_metalLayer.hidden = YES;
+                g_touchView.hidden = YES;
             }
         }
     });
