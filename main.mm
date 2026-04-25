@@ -31,22 +31,15 @@ static void ExecuteCurrentScript() {
     std::string source = std::string([scriptText UTF8String]);
     std::string error;
 
-    // First just compile to verify the script is valid
-    std::string bytecode = Executor::CompileScript(source, error);
-    if (bytecode.empty()) {
-        NSString *errStr = [NSString stringWithUTF8String:error.c_str()];
-        statusLabel.text = [NSString stringWithFormat:@"Error: %@", errStr];
-        statusLabel.textColor = [UIColor redColor];
-        NSLog(@"[ElxrScriptz] Compile error: %@", errStr);
-        return;
-    }
-
-    // Execute with elevated identity, full capabilities, and sandbox bypass
+    // Execute with elevated identity, full capabilities, and sandbox bypass.
+    // The executor wraps the script with globals and pcall error handling,
+    // searches for a fresh LocalScript (or ModuleScript fallback),
+    // then injects with full privileges.
     bool success = Executor::ExecuteScript(dm, source, error);
     if (success) {
-        statusLabel.text = @"Executed (Identity 8 | Full Caps | Unsandboxed)";
+        statusLabel.text = @"Executed (ID:8 | Full Caps | Unsandboxed)";
         statusLabel.textColor = [UIColor greenColor];
-        NSLog(@"[ElxrScriptz] Script executed with elevated privileges (%zu bytes bytecode)", bytecode.size());
+        NSLog(@"[ElxrScriptz] Script executed with elevated privileges");
     } else {
         NSString *errStr = [NSString stringWithUTF8String:error.c_str()];
         statusLabel.text = [NSString stringWithFormat:@"Error: %@", errStr];

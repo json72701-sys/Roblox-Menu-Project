@@ -6,13 +6,67 @@
 #include <cstdlib>
 #include <cstring>
 #include <mach/mach.h>
+#include <vector>
+#include <string>
 
 namespace Executor {
+
+// Track previously used script instances so we pick a fresh one each execution
+static std::vector<uintptr_t> usedScripts;
+
+// Globals that scripts commonly access — tell compiler these are mutable
+// so it doesn't optimize away repeated reads through these names
+static const char* sMutableGlobals[] = {
+    "game", "workspace", "script", "plugin",
+    "shared", "Instance", "Vector3", "CFrame",
+    "Color3", "BrickColor", "UDim2", "UDim",
+    "Enum", "tick", "wait", "spawn", "delay",
+    "warn", "typeof", "type", "newproxy",
+    "select", "unpack", "rawget", "rawset",
+    "setmetatable", "getmetatable",
+    "pcall", "xpcall", "coroutine",
+    "string", "table", "math", "os", "debug",
+    nullptr
+};
+
+// Wraps user script to ensure globals are explicitly available and
+// errors are caught with a traceback so the script never silently dies.
+static std::string WrapScript(const std::string& source) {
+    std::string wrapped;
+    wrapped.reserve(source.size() + 512);
+
+    // Establish local references to critical globals so they survive
+    // even if the environment is sandboxed or the global table is modified.
+    wrapped +=
+        "local game = game\n"
+        "local workspace = workspace or game:GetService('Workspace')\n"
+        "local Players = game:GetService('Players')\n"
+        "local ReplicatedStorage = game:GetService('ReplicatedStorage')\n"
+        "local Lighting = game:GetService('Lighting')\n"
+        "local RunService = game:GetService('RunService')\n"
+        "local UserInputService = game:GetService('UserInputService')\n"
+        "local TweenService = game:GetService('TweenService')\n"
+        "local HttpService = game:GetService('HttpService')\n"
+        "local StarterGui = game:GetService('StarterGui')\n"
+        "local CoreGui = game:GetService('CoreGui')\n"
+        "local LocalPlayer = Players.LocalPlayer\n"
+        "\n";
+
+    // Wrap the user's code in a protected call so runtime errors
+    // are caught and printed instead of crashing the LocalScript.
+    wrapped += "local ok, err = pcall(function()\n";
+    wrapped += source;
+    wrapped += "\nend)\n";
+    wrapped += "if not ok then warn('[ElxrScriptz] Runtime error: ' .. tostring(err)) end\n";
+
+    return wrapped;
+}
 
 std::string CompileScript(const std::string& source, std::string& errorOut) {
     Luau::CompileOptions options;
     options.optimizationLevel = 1;
     options.debugLevel = 1;
+    options.mutableGlobals = sMutableGlobals;
 
     std::string bytecode = Luau::compile(source, options);
 
@@ -67,12 +121,21 @@ static bool ReadClassName(uintptr_t instance, char* outBuf, size_t bufSize) {
                              (pointer_t)outBuf, &outSize) == KERN_SUCCESS;
 }
 
-// Recursively search for a child of the given class name
-static uintptr_t FindChildOfClass(uintptr_t instance, const char* className, int depth) {
-    if (depth <= 0 || !instance) return 0;
+// Check whether a script address was already used in a previous execution
+static bool WasAlreadyUsed(uintptr_t addr) {
+    for (size_t i = 0; i < usedScripts.size(); ++i) {
+        if (usedScripts[i] == addr) return true;
+    }
+    return false;
+}
+
+// Collect ALL instances of a class under a parent (depth-limited recursive)
+static void CollectChildrenOfClass(uintptr_t instance, const char* className,
+                                   int depth, std::vector<uintptr_t>& results) {
+    if (depth <= 0 || !instance) return;
 
     uintptr_t childrenPtr = mem::read<uintptr_t>(instance + offsets::Children);
-    if (!childrenPtr) return 0;
+    if (!childrenPtr) return;
 
     uintptr_t childrenEnd = mem::read<uintptr_t>(childrenPtr + offsets::ChildrenEnd);
     uintptr_t current = mem::read<uintptr_t>(childrenPtr);
@@ -83,16 +146,12 @@ static uintptr_t FindChildOfClass(uintptr_t instance, const char* className, int
             char nameBuf[64] = {0};
             if (ReadClassName(child, nameBuf, sizeof(nameBuf))) {
                 if (strcmp(nameBuf, className) == 0)
-                    return child;
+                    results.push_back(child);
             }
-
-            // Recurse into children (limit depth to avoid infinite loops)
-            uintptr_t found = FindChildOfClass(child, className, depth - 1);
-            if (found) return found;
+            CollectChildrenOfClass(child, className, depth - 1, results);
         }
         current += sizeof(uintptr_t);
     }
-    return 0;
 }
 
 // Search for a service by class name directly under DataModel
@@ -120,11 +179,9 @@ static uintptr_t FindService(uintptr_t dataModel, const char* serviceName) {
 bool SetIdentity(uintptr_t scriptInstance, int identityLevel) {
     if (!scriptInstance) return false;
 
-    // Read the script's extra space pointer which contains the thread state
     uintptr_t extraSpace = mem::read<uintptr_t>(scriptInstance + offsets::ScriptExtraSpace);
     if (!extraSpace) return false;
 
-    // Write the identity level into the extra space identity slot
     int32_t identity = identityLevel;
     return WriteMemory(extraSpace + offsets::Identity, &identity, sizeof(identity));
 }
@@ -132,7 +189,6 @@ bool SetIdentity(uintptr_t scriptInstance, int identityLevel) {
 bool SetCapabilities(uintptr_t scriptInstance) {
     if (!scriptInstance) return false;
 
-    // Set full capabilities bitmask on the instance
     uint64_t caps = offsets::FullCapabilities;
     return WriteMemory(scriptInstance + offsets::InstanceCapabilities, &caps, sizeof(caps));
 }
@@ -140,14 +196,11 @@ bool SetCapabilities(uintptr_t scriptInstance) {
 bool SetSandboxed(uintptr_t scriptInstance, bool sandboxed) {
     if (!scriptInstance) return false;
 
-    // Read the current byte at the Sandboxed offset
     uint8_t currentByte = mem::read<uint8_t>(scriptInstance + offsets::Sandboxed);
-
-    if (sandboxed) {
+    if (sandboxed)
         currentByte |= 0x1;
-    } else {
+    else
         currentByte &= ~0x1;
-    }
 
     return WriteMemory(scriptInstance + offsets::Sandboxed, &currentByte, sizeof(currentByte));
 }
@@ -155,93 +208,98 @@ bool SetSandboxed(uintptr_t scriptInstance, bool sandboxed) {
 bool InvalidateHash(uintptr_t scriptInstance) {
     if (!scriptInstance) return false;
 
-    // Zero out the bytecode hash so Roblox re-reads the bytecode
     uint32_t zeroHash = 0;
     return WriteMemory(scriptInstance + offsets::LocalScriptHash, &zeroHash, sizeof(zeroHash));
 }
 
-// Set the RunContext on a script instance (0=Legacy, 1=Server, 2=Client, 3=Plugin)
 static bool SetRunContext(uintptr_t scriptInstance, uint8_t context) {
     return WriteMemory(scriptInstance + offsets::RunContext, &context, sizeof(context));
 }
 
-// Try to find a LocalScript across multiple locations in the game hierarchy
-static uintptr_t FindLocalScript(uintptr_t dataModel) {
-    // 1. Try Workspace first (most common)
-    uintptr_t workspace = mem::read<uintptr_t>(dataModel + offsets::Workspace);
-    if (workspace) {
-        uintptr_t ls = FindChildOfClass(workspace, "LocalScript", 4);
-        if (ls) return ls;
-    }
+// Collect LocalScripts from every major service, preferring ones not yet used
+static uintptr_t FindFreshLocalScript(uintptr_t dataModel) {
+    std::vector<uintptr_t> candidates;
 
-    // 2. Try Players -> LocalPlayer -> PlayerGui
+    // Workspace
+    uintptr_t workspace = mem::read<uintptr_t>(dataModel + offsets::Workspace);
+    if (workspace)
+        CollectChildrenOfClass(workspace, "LocalScript", 5, candidates);
+
+    // Players → LocalPlayer subtree
     uintptr_t players = FindService(dataModel, "Players");
     if (players) {
-        uintptr_t localPlayer = mem::read<uintptr_t>(players + offsets::LocalPlayer);
-        if (localPlayer) {
-            uintptr_t ls = FindChildOfClass(localPlayer, "LocalScript", 5);
-            if (ls) return ls;
-        }
+        uintptr_t lp = mem::read<uintptr_t>(players + offsets::LocalPlayer);
+        if (lp)
+            CollectChildrenOfClass(lp, "LocalScript", 6, candidates);
     }
 
-    // 3. Try ReplicatedFirst (scripts here run early)
-    uintptr_t replicatedFirst = FindService(dataModel, "ReplicatedFirst");
-    if (replicatedFirst) {
-        uintptr_t ls = FindChildOfClass(replicatedFirst, "LocalScript", 3);
-        if (ls) return ls;
+    // ReplicatedFirst
+    uintptr_t rf = FindService(dataModel, "ReplicatedFirst");
+    if (rf) CollectChildrenOfClass(rf, "LocalScript", 4, candidates);
+
+    // StarterPlayer
+    uintptr_t sp = FindService(dataModel, "StarterPlayer");
+    if (sp) CollectChildrenOfClass(sp, "LocalScript", 5, candidates);
+
+    // CoreGui
+    uintptr_t cg = FindService(dataModel, "CoreGui");
+    if (cg) CollectChildrenOfClass(cg, "LocalScript", 6, candidates);
+
+    // StarterGui
+    uintptr_t sg = FindService(dataModel, "StarterGui");
+    if (sg) CollectChildrenOfClass(sg, "LocalScript", 5, candidates);
+
+    // Pick the first candidate that hasn't been used yet
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!WasAlreadyUsed(candidates[i]))
+            return candidates[i];
     }
 
-    // 4. Try StarterPlayerScripts / StarterCharacterScripts via StarterPlayer
-    uintptr_t starterPlayer = FindService(dataModel, "StarterPlayer");
-    if (starterPlayer) {
-        uintptr_t ls = FindChildOfClass(starterPlayer, "LocalScript", 4);
-        if (ls) return ls;
-    }
-
-    // 5. Try CoreGui for maximum privilege
-    uintptr_t coreGui = FindService(dataModel, "CoreGui");
-    if (coreGui) {
-        uintptr_t ls = FindChildOfClass(coreGui, "LocalScript", 5);
-        if (ls) return ls;
+    // All exhausted — reuse the first candidate (wrap around)
+    if (!candidates.empty()) {
+        usedScripts.clear();
+        return candidates[0];
     }
 
     return 0;
 }
 
-bool ExecuteScript(uintptr_t dataModel, const std::string& source, std::string& errorOut) {
-    // Step 1: Compile the script
-    std::string bytecode = CompileScript(source, errorOut);
-    if (bytecode.empty())
-        return false;
+// Fallback: try to find a ModuleScript and inject into it instead
+static uintptr_t FindFreshModuleScript(uintptr_t dataModel) {
+    std::vector<uintptr_t> candidates;
 
-    // Step 2: Get ScriptContext (needed for identity operations)
-    uintptr_t scriptContext = mem::read<uintptr_t>(dataModel + offsets::ScriptContext);
-    if (!scriptContext) {
-        errorOut = "Could not find ScriptContext";
-        return false;
+    uintptr_t workspace = mem::read<uintptr_t>(dataModel + offsets::Workspace);
+    if (workspace)
+        CollectChildrenOfClass(workspace, "ModuleScript", 5, candidates);
+
+    uintptr_t rs = FindService(dataModel, "ReplicatedStorage");
+    if (rs) CollectChildrenOfClass(rs, "ModuleScript", 5, candidates);
+
+    uintptr_t sp = FindService(dataModel, "StarterPlayer");
+    if (sp) CollectChildrenOfClass(sp, "ModuleScript", 5, candidates);
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (!WasAlreadyUsed(candidates[i]))
+            return candidates[i];
     }
 
-    // Step 3: Find a LocalScript to hijack — search across multiple services
-    uintptr_t localScript = FindLocalScript(dataModel);
-    if (!localScript) {
-        errorOut = "Could not find a LocalScript instance to inject into";
-        return false;
-    }
+    if (!candidates.empty())
+        return candidates[0];
 
-    // Step 4: Elevate the execution environment before injection
-    //   a) Set identity to level 8 (CoreScript/Plugin level — full API access)
-    SetIdentity(localScript, 8);
+    return 0;
+}
 
-    //   b) Set full capabilities bitmask so all APIs are unlocked
-    SetCapabilities(localScript);
+// Inject bytecode into a script instance (works for both LocalScript and ModuleScript)
+static bool InjectBytecode(uintptr_t scriptInstance, bool isModule,
+                           const std::string& bytecode, std::string& errorOut) {
 
-    //   c) Disable sandboxing so the script can access all services freely
-    SetSandboxed(localScript, false);
+    // Elevate execution environment
+    SetIdentity(scriptInstance, 8);
+    SetCapabilities(scriptInstance);
+    SetSandboxed(scriptInstance, false);
+    SetRunContext(scriptInstance, 2);
 
-    //   d) Set RunContext to Client (2) for proper execution context
-    SetRunContext(localScript, 2);
-
-    // Step 5: Allocate memory for the bytecode and write it
+    // Allocate and write bytecode
     uintptr_t bytecodeAddr = AllocateMemory(bytecode.size());
     if (!bytecodeAddr) {
         errorOut = "Failed to allocate memory for bytecode";
@@ -253,28 +311,71 @@ bool ExecuteScript(uintptr_t dataModel, const std::string& source, std::string& 
         return false;
     }
 
-    // Step 6: Inject the bytecode pointer into the LocalScript
-    uintptr_t bytecodeSlot = localScript + offsets::LocalScriptByteCode;
+    // Determine the right offsets based on script type
+    uintptr_t bcSlotOffset = isModule ? offsets::ModuleScriptByteCode : offsets::LocalScriptByteCode;
+    uintptr_t bcPtrOffset  = isModule ? offsets::ModuleScriptBytecodePointer : offsets::LocalScriptBytecodePointer;
+    uintptr_t hashOffset   = isModule ? offsets::ModuleScriptHash : offsets::LocalScriptHash;
+
+    uintptr_t bytecodeSlot = scriptInstance + bcSlotOffset;
     uintptr_t bytecodeStructPtr = mem::read<uintptr_t>(bytecodeSlot);
 
     if (bytecodeStructPtr) {
-        WriteMemory(bytecodeStructPtr + offsets::LocalScriptBytecodePointer,
-                    &bytecodeAddr, sizeof(uintptr_t));
+        // Write bytecode pointer
+        WriteMemory(bytecodeStructPtr + bcPtrOffset, &bytecodeAddr, sizeof(uintptr_t));
 
-        // Write the size of the bytecode after the pointer
+        // Write bytecode size
         uint64_t bcSize = bytecode.size();
-        WriteMemory(bytecodeStructPtr + offsets::LocalScriptBytecodePointer + sizeof(uintptr_t),
-                    &bcSize, sizeof(bcSize));
+        WriteMemory(bytecodeStructPtr + bcPtrOffset + sizeof(uintptr_t), &bcSize, sizeof(bcSize));
     } else {
-        errorOut = "LocalScript bytecode struct pointer is null";
+        errorOut = "Script bytecode struct pointer is null";
         return false;
     }
 
-    // Step 7: Invalidate the hash to force Roblox to re-deserialize our bytecode
-    InvalidateHash(localScript);
+    // Invalidate hash to force re-deserialization
+    uint32_t zeroHash = 0;
+    WriteMemory(scriptInstance + hashOffset, &zeroHash, sizeof(zeroHash));
 
-    errorOut.clear();
+    // Mark this script as used
+    usedScripts.push_back(scriptInstance);
+
     return true;
+}
+
+bool ExecuteScript(uintptr_t dataModel, const std::string& source, std::string& errorOut) {
+    // Step 1: Wrap the user's script with global setup and error handling
+    std::string wrappedSource = WrapScript(source);
+
+    // Step 2: Compile the wrapped script
+    std::string bytecode = CompileScript(wrappedSource, errorOut);
+    if (bytecode.empty()) {
+        // If wrapping caused issues, try compiling the raw source
+        errorOut.clear();
+        bytecode = CompileScript(source, errorOut);
+        if (bytecode.empty())
+            return false;
+    }
+
+    // Step 3: Verify ScriptContext exists
+    uintptr_t scriptContext = mem::read<uintptr_t>(dataModel + offsets::ScriptContext);
+    if (!scriptContext) {
+        errorOut = "Could not find ScriptContext";
+        return false;
+    }
+
+    // Step 4: Find a fresh LocalScript target
+    uintptr_t target = FindFreshLocalScript(dataModel);
+    if (target) {
+        return InjectBytecode(target, false, bytecode, errorOut);
+    }
+
+    // Step 5: No LocalScript found — fall back to ModuleScript
+    target = FindFreshModuleScript(dataModel);
+    if (target) {
+        return InjectBytecode(target, true, bytecode, errorOut);
+    }
+
+    errorOut = "No LocalScript or ModuleScript found to inject into";
+    return false;
 }
 
 } // namespace Executor
