@@ -5,8 +5,8 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = ElxrScriptz
 
-# Added Methods/DataModel.cpp so your Execute logic actually compiles
-# Removed Menu.cpp because we put that code inside main.mm
+# ONLY main.mm goes here. 
+# main.mm will "pull in" the other code via #include automatically.
 ElxrScriptz_FILES = main.mm
 ElxrScriptz_FRAMEWORKS = UIKit Foundation Security
 ElxrScriptz_CFLAGS = -fobjc-arc -I./Include -I./Methods -I./Structures
