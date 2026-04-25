@@ -5,9 +5,10 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = ElxrScriptz
 
-# Main tweak source + Executor
+# Main tweak source + Executor + Loadstring
 ElxrScriptz_FILES = main.mm \
 	Methods/Executor.cpp \
+	Methods/Loadstring.cpp \
 	Luau/Compiler/src/Compiler.cpp \
 	Luau/Compiler/src/BuiltinFolding.cpp \
 	Luau/Compiler/src/Builtins.cpp \

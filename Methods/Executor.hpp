@@ -29,6 +29,14 @@ namespace Executor {
 
     // Invalidates the script hash to force Roblox to re-deserialize the bytecode.
     bool InvalidateHash(uintptr_t scriptInstance);
+
+    // Initializes loadstring support by resolving Luau VM function pointers.
+    // Call once at startup with the Roblox binary's base address.
+    // Returns true if loadstring will be available (all VM offsets non-zero).
+    bool InitLoadstring(uintptr_t robloxBase);
+
+    // Whether loadstring support is active (VM hooks resolved).
+    bool IsLoadstringAvailable();
 }
 
 #endif

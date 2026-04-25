@@ -1,4 +1,5 @@
 #include "Executor.hpp"
+#include "Loadstring.hpp"
 #include "../offsets.hpp"
 #include "../Include/mem.hpp"
 #include "Luau/Compiler.h"
@@ -341,6 +342,27 @@ static bool InjectBytecode(uintptr_t scriptInstance, bool isModule,
     return true;
 }
 
+bool InitLoadstring(uintptr_t robloxBase) {
+    return Loadstring::ResolveVMFunctions(robloxBase);
+}
+
+bool IsLoadstringAvailable() {
+    return Loadstring::IsAvailable();
+}
+
+// Retrieves the lua_State* from a script instance's thread via ScriptContext
+static void* GetLuaStateFromScript(uintptr_t dataModel, uintptr_t scriptInstance) {
+    uintptr_t scriptContext = mem::read<uintptr_t>(dataModel + offsets::ScriptContext);
+    if (!scriptContext) return nullptr;
+
+    uintptr_t extraSpace = mem::read<uintptr_t>(scriptInstance + offsets::ScriptExtraSpace);
+    if (!extraSpace) return nullptr;
+
+    // The lua_State is typically at the start of the extra space structure
+    uintptr_t luaState = mem::read<uintptr_t>(extraSpace);
+    return reinterpret_cast<void*>(luaState);
+}
+
 bool ExecuteScript(uintptr_t dataModel, const std::string& source, std::string& errorOut) {
     // Step 1: Wrap the user's script with global setup and error handling
     std::string wrappedSource = WrapScript(source);
@@ -364,18 +386,28 @@ bool ExecuteScript(uintptr_t dataModel, const std::string& source, std::string& 
 
     // Step 4: Find a fresh LocalScript target
     uintptr_t target = FindFreshLocalScript(dataModel);
-    if (target) {
-        return InjectBytecode(target, false, bytecode, errorOut);
+    bool isModule = false;
+    if (!target) {
+        // Step 5: No LocalScript found -- fall back to ModuleScript
+        target = FindFreshModuleScript(dataModel);
+        isModule = true;
     }
 
-    // Step 5: No LocalScript found — fall back to ModuleScript
-    target = FindFreshModuleScript(dataModel);
-    if (target) {
-        return InjectBytecode(target, true, bytecode, errorOut);
+    if (!target) {
+        errorOut = "No LocalScript or ModuleScript found to inject into";
+        return false;
     }
 
-    errorOut = "No LocalScript or ModuleScript found to inject into";
-    return false;
+    // Step 6: Register loadstring on the script's lua_State if VM hooks are available
+    if (Loadstring::IsAvailable()) {
+        void* L = GetLuaStateFromScript(dataModel, target);
+        if (L) {
+            Loadstring::RegisterGlobal(reinterpret_cast<Loadstring::lua_State*>(L));
+        }
+    }
+
+    // Step 7: Inject bytecode
+    return InjectBytecode(target, isModule, bytecode, errorOut);
 }
 
 } // namespace Executor

@@ -4,6 +4,7 @@
 #include "offsets.hpp"
 #include "Methods/DataModel.cpp"
 #include "Methods/Executor.hpp"
+#include "Methods/Loadstring.hpp"
 // --------------------------------
 
 static bool isMenuVisible = false;
@@ -37,9 +38,13 @@ static void ExecuteCurrentScript() {
     // then injects with full privileges.
     bool success = Executor::ExecuteScript(dm, source, error);
     if (success) {
-        statusLabel.text = @"Executed (ID:8 | Full Caps | Unsandboxed)";
+        NSString *features = Executor::IsLoadstringAvailable()
+            ? @"Executed (ID:8 | Full Caps | loadstring)"
+            : @"Executed (ID:8 | Full Caps | Unsandboxed)";
+        statusLabel.text = features;
         statusLabel.textColor = [UIColor greenColor];
-        NSLog(@"[ElxrScriptz] Script executed with elevated privileges");
+        NSLog(@"[ElxrScriptz] Script executed with elevated privileges (loadstring: %s)",
+              Executor::IsLoadstringAvailable() ? "ON" : "OFF");
     } else {
         NSString *errStr = [NSString stringWithUTF8String:error.c_str()];
         statusLabel.text = [NSString stringWithFormat:@"Error: %@", errStr];
@@ -197,6 +202,12 @@ static void initialize() {
         }
 
         if (win) {
+            // Initialize loadstring VM hooks (gracefully skipped if offsets are 0x0)
+            uintptr_t robloxBase = 0x100000000;
+            bool loadstringReady = Executor::InitLoadstring(robloxBase);
+            NSLog(@"[ElxrScriptz] loadstring support: %s",
+                  loadstringReady ? "ACTIVE" : "WAITING FOR OFFSETS");
+
             // Create the script executor panel
             CreateMenuPanel(win);
 
