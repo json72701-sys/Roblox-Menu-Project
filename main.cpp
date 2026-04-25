@@ -1,25 +1,18 @@
-#include <iostream>
-#include <vector>
 #include "imgui.h"
+#include <iostream>
 
-// This is the "Constructor" - it runs the moment the dylib is loaded
-__attribute__((constructor))
-static void initialize() {
-    std::cout << "Executor Loaded Successfully!" << std::endl;
-    // Your initialization logic for the menu goes here
+// This function runs every time the game draws a frame
+void DrawMenu() {
+    ImGui::Begin("Roblox Executor", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Text("Status: Active ✅");
+    if (ImGui::Button("Speed Hack")) {
+        // Your hack logic goes here later
+    }
+    ImGui::End();
 }
 
-void DrawMenu() {
-    ImGui::Begin("My Custom Executor");
-    ImGui::Text("Status: Active");
-    
-    if (ImGui::Button("Execute Script")) {
-        // Script execution logic
-    }
-    
-    if (ImGui::Button("Clear Log")) {
-        // Clear logic
-    }
-    
-    ImGui::End();
+// This is the "Hook" that injects into Roblox
+__attribute__((constructor))
+static void initialize() {
+    std::cout << "Executor Loaded!" << std::endl;
 }
