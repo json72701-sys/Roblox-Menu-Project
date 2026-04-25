@@ -1,9 +1,21 @@
 #import <UIKit/UIKit.h>
 
-// This tells the compiler that your ImGui menu exists in another file
-extern "C" void RenderImGuiMenu(bool visible);
+// --- CONNECTING YOUR UD LOGIC ---
+#include "offsets.hpp"
+#include "Methods/DataModel.cpp"
+// --------------------------------
 
 static bool isMenuVisible = false;
+
+// THIS WAS MISSING: This is the actual function the compiler was looking for
+extern "C" void RenderImGuiMenu(bool visible) {
+    if (visible) {
+        // This is where the menu appears. 
+        // For now, it will trigger your UD logic in the background
+        uintptr_t dm = GetDataModel(); 
+        NSLog(@"[ElxrScriptz] DataModel found at: %p", (void*)dm);
+    }
+}
 
 @interface DraggableLogo : UIButton
 @end
@@ -12,14 +24,14 @@ static bool isMenuVisible = false;
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *touch = [touches anyObject];
     CGPoint currentLocation = [touch locationInView:self.superview];
-    self.center = currentLocation; // Handles the dragging
+    self.center = currentLocation;
 }
 
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *touch = [touches anyObject];
     if (touch.tapCount == 1) {
         isMenuVisible = !isMenuVisible;
-        RenderImGuiMenu(isMenuVisible); // Toggles the menu
+        RenderImGuiMenu(isMenuVisible); 
     }
 }
 @end
@@ -35,7 +47,9 @@ static void initialize() {
         if (win) {
             DraggableLogo *btn = [DraggableLogo buttonWithType:UIButtonTypeCustom];
             [btn setFrame:CGRectMake(100, 100, 60, 60)];
-            [btn setTitle:@"GOLD" forState:UIControlStateNormal];
+            
+            // Updated your Executor Name
+            [btn setTitle:@"ELXR" forState:UIControlStateNormal];
             [btn setBackgroundColor:[UIColor orangeColor]];
             btn.layer.cornerRadius = 30;
             btn.layer.zPosition = 10000;
