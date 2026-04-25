@@ -84,6 +84,7 @@ namespace offsets {
     inline constexpr uintptr_t InsetMinY = 0xFC;
     inline constexpr uintptr_t InstanceAttributePointer1 = 0x48;
     inline constexpr uintptr_t InstanceAttributePointer2 = 0x18;
+    inline constexpr uintptr_t Identity = 0x30;
     inline constexpr uintptr_t InstanceCapabilities = 0x208;
     inline constexpr uintptr_t JobEnd = 0xD0;
     inline constexpr uintptr_t JobId = 0x138;
@@ -143,6 +144,8 @@ namespace offsets {
     inline constexpr uintptr_t Sandboxed = 0xC5;
     inline constexpr uintptr_t ScreenGuiEnabled = 0x50D;
     inline constexpr uintptr_t ScriptContext = 0x3F0;
+    inline constexpr uintptr_t ScriptContextToIdentity = 0x1E8;
+    inline constexpr uintptr_t ScriptExtraSpace = 0x48;
     inline constexpr uintptr_t Sit = 0x1DC;
     inline constexpr uintptr_t SkyboxBk = 0x110;
     inline constexpr uintptr_t SkyboxDn = 0x140;
@@ -177,6 +180,8 @@ namespace offsets {
     inline constexpr uintptr_t Workspace = 0x178;
     inline constexpr uintptr_t WorkspaceToWorld = 0x408;
     inline constexpr uintptr_t viewmatrix = 0x130;
+    // Full capabilities bitmask to unlock all API access
+    inline constexpr uint64_t FullCapabilities = 0xFFFFFFFFFFFFFFFFULL;
 }
 
 #endif
