@@ -18,6 +18,14 @@ jobs:
           -miphoneos-version-min=14.0 \
           -I. \
           -I./imgui \
+          -I./Include \
+          -I./Methods \
+          -I./Structures \
+          -I./Luau/Compiler/include \
+          -I./Luau/Compiler/src \
+          -I./Luau/Ast/include \
+          -I./Luau/Bytecode/include \
+          -I./Luau/Common/include \
           -framework UIKit \
           -framework Metal \
           -framework Foundation \

@@ -2,18 +2,58 @@
 
 // --- CONNECTING YOUR UD LOGIC ---
 #include "offsets.hpp"
-#include "Methods/DataModel.cpp" 
+#include "Methods/DataModel.cpp"
+#include "Methods/Executor.hpp"
+#include "Methods/Loadstring.hpp"
 // --------------------------------
 
 static bool isMenuVisible = false;
+static UIView *menuPanel = nil;
+static UITextView *scriptInput = nil;
+static UILabel *statusLabel = nil;
 
-// Defining this here so it's only in ONE place
-extern "C" void RenderImGuiMenu(bool visible) {
-    if (visible) {
-        uintptr_t dm = GetDataModel(); 
-        NSLog(@"[ElxrScriptz] DataModel found: %p", (void*)dm);
+#pragma mark - Script Execution
+
+static void ExecuteCurrentScript() {
+    NSString *scriptText = scriptInput.text;
+    if (scriptText.length == 0) {
+        statusLabel.text = @"No script to run";
+        statusLabel.textColor = [UIColor orangeColor];
+        return;
+    }
+
+    uintptr_t dm = GetDataModel();
+    if (!dm) {
+        statusLabel.text = @"DataModel not found";
+        statusLabel.textColor = [UIColor redColor];
+        return;
+    }
+
+    std::string source = std::string([scriptText UTF8String]);
+    std::string error;
+
+    // Execute with elevated identity, full capabilities, and sandbox bypass.
+    // The executor wraps the script with globals and pcall error handling,
+    // searches for a fresh LocalScript (or ModuleScript fallback),
+    // then injects with full privileges.
+    bool success = Executor::ExecuteScript(dm, source, error);
+    if (success) {
+        NSString *features = Executor::IsLoadstringAvailable()
+            ? @"Executed (ID:8 | Full Caps | loadstring)"
+            : @"Executed (ID:8 | Full Caps | Unsandboxed)";
+        statusLabel.text = features;
+        statusLabel.textColor = [UIColor greenColor];
+        NSLog(@"[ElxrScriptz] Script executed with elevated privileges (loadstring: %s)",
+              Executor::IsLoadstringAvailable() ? "ON" : "OFF");
+    } else {
+        NSString *errStr = [NSString stringWithUTF8String:error.c_str()];
+        statusLabel.text = [NSString stringWithFormat:@"Error: %@", errStr];
+        statusLabel.textColor = [UIColor redColor];
+        NSLog(@"[ElxrScriptz] Execution error: %@", errStr);
     }
 }
+
+#pragma mark - Draggable Logo Button
 
 @interface DraggableLogo : UIButton
 @end
@@ -29,10 +69,129 @@ extern "C" void RenderImGuiMenu(bool visible) {
     UITouch *touch = [touches anyObject];
     if (touch.tapCount == 1) {
         isMenuVisible = !isMenuVisible;
-        RenderImGuiMenu(isMenuVisible); 
+
+        if (menuPanel) {
+            menuPanel.hidden = !isMenuVisible;
+        }
+
+        uintptr_t dm = GetDataModel();
+        NSLog(@"[ElxrScriptz] DataModel: %p | Menu: %s", (void*)dm, isMenuVisible ? "ON" : "OFF");
     }
 }
 @end
+
+#pragma mark - Execute Button
+
+@interface ExecuteButton : UIButton
+@end
+
+@implementation ExecuteButton
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesEnded:touches withEvent:event];
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInView:self];
+    if ([self pointInside:loc withEvent:event]) {
+        ExecuteCurrentScript();
+    }
+}
+@end
+
+#pragma mark - Clear Button
+
+@interface ClearButton : UIButton
+@end
+
+@implementation ClearButton
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesEnded:touches withEvent:event];
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInView:self];
+    if ([self pointInside:loc withEvent:event]) {
+        scriptInput.text = @"";
+        statusLabel.text = @"Cleared";
+        statusLabel.textColor = [UIColor lightGrayColor];
+    }
+}
+@end
+
+#pragma mark - UI Setup
+
+static void CreateMenuPanel(UIWindow *win) {
+    CGFloat screenW = win.bounds.size.width;
+    CGFloat screenH = win.bounds.size.height;
+    CGFloat panelW = screenW * 0.85;
+    CGFloat panelH = screenH * 0.5;
+    CGFloat panelX = (screenW - panelW) / 2;
+    CGFloat panelY = (screenH - panelH) / 2;
+
+    // Main panel
+    menuPanel = [[UIView alloc] initWithFrame:CGRectMake(panelX, panelY, panelW, panelH)];
+    menuPanel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.9];
+    menuPanel.layer.cornerRadius = 12;
+    menuPanel.layer.borderColor = [UIColor blueColor].CGColor;
+    menuPanel.layer.borderWidth = 2;
+    menuPanel.layer.zPosition = 9999;
+    menuPanel.hidden = YES;
+    menuPanel.clipsToBounds = YES;
+
+    // Title bar
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, panelW, 36)];
+    title.text = @"  ElxrScriptz - Script Executor";
+    title.textColor = [UIColor cyanColor];
+    title.font = [UIFont boldSystemFontOfSize:15];
+    title.backgroundColor = [[UIColor darkGrayColor] colorWithAlphaComponent:0.6];
+    [menuPanel addSubview:title];
+
+    // Script text input
+    CGFloat inputY = 40;
+    CGFloat inputH = panelH - 120;
+    scriptInput = [[UITextView alloc] initWithFrame:CGRectMake(8, inputY, panelW - 16, inputH)];
+    scriptInput.backgroundColor = [[UIColor darkGrayColor] colorWithAlphaComponent:0.5];
+    scriptInput.textColor = [UIColor whiteColor];
+    scriptInput.font = [UIFont fontWithName:@"Menlo" size:13];
+    scriptInput.layer.cornerRadius = 6;
+    scriptInput.text = @"-- Paste your Luau script here\nprint('Hello from ElxrScriptz!')";
+    scriptInput.autocorrectionType = UITextAutocorrectionTypeNo;
+    scriptInput.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    scriptInput.keyboardAppearance = UIKeyboardAppearanceDark;
+    [menuPanel addSubview:scriptInput];
+
+    // Button row
+    CGFloat btnY = inputY + inputH + 8;
+    CGFloat btnW = (panelW - 24) / 2;
+    CGFloat btnH = 36;
+
+    // Execute button
+    ExecuteButton *execBtn = [ExecuteButton buttonWithType:UIButtonTypeCustom];
+    execBtn.frame = CGRectMake(8, btnY, btnW, btnH);
+    [execBtn setTitle:@"Execute" forState:UIControlStateNormal];
+    [execBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    execBtn.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:1.0];
+    execBtn.layer.cornerRadius = 6;
+    execBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [menuPanel addSubview:execBtn];
+
+    // Clear button
+    ClearButton *clearBtn = [ClearButton buttonWithType:UIButtonTypeCustom];
+    clearBtn.frame = CGRectMake(16 + btnW, btnY, btnW, btnH);
+    [clearBtn setTitle:@"Clear" forState:UIControlStateNormal];
+    [clearBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    clearBtn.backgroundColor = [UIColor darkGrayColor];
+    clearBtn.layer.cornerRadius = 6;
+    clearBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [menuPanel addSubview:clearBtn];
+
+    // Status label
+    statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(8, btnY + btnH + 4, panelW - 16, 20)];
+    statusLabel.text = @"Ready";
+    statusLabel.textColor = [UIColor lightGrayColor];
+    statusLabel.font = [UIFont systemFontOfSize:12];
+    [menuPanel addSubview:statusLabel];
+
+    [win addSubview:menuPanel];
+}
+
+#pragma mark - Entry Point
 
 __attribute__((constructor))
 static void initialize() {
@@ -43,16 +202,25 @@ static void initialize() {
         }
 
         if (win) {
+            // Initialize loadstring VM hooks (gracefully skipped if offsets are 0x0)
+            uintptr_t robloxBase = 0x100000000;
+            bool loadstringReady = Executor::InitLoadstring(robloxBase);
+            NSLog(@"[ElxrScriptz] loadstring support: %s",
+                  loadstringReady ? "ACTIVE" : "WAITING FOR OFFSETS");
+
+            // Create the script executor panel
+            CreateMenuPanel(win);
+
+            // Create the draggable toggle button
             DraggableLogo *btn = [DraggableLogo buttonWithType:UIButtonTypeCustom];
             [btn setFrame:CGRectMake(100, 100, 60, 60)];
-            
-            // Your Blue ELXR Logo
             [btn setTitle:@"ELXR" forState:UIControlStateNormal];
-            [btn setBackgroundColor:[UIColor blueColor]]; 
-            
+            [btn setBackgroundColor:[UIColor blueColor]];
             btn.layer.cornerRadius = 30;
             btn.layer.zPosition = 10000;
             [win addSubview:btn];
+
+            NSLog(@"[ElxrScriptz] Initialized with Luau compiler");
         }
     });
 }

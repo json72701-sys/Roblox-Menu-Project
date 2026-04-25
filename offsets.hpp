@@ -84,6 +84,7 @@ namespace offsets {
     inline constexpr uintptr_t InsetMinY = 0xFC;
     inline constexpr uintptr_t InstanceAttributePointer1 = 0x48;
     inline constexpr uintptr_t InstanceAttributePointer2 = 0x18;
+    inline constexpr uintptr_t Identity = 0x30;
     inline constexpr uintptr_t InstanceCapabilities = 0x208;
     inline constexpr uintptr_t JobEnd = 0xD0;
     inline constexpr uintptr_t JobId = 0x138;
@@ -143,6 +144,8 @@ namespace offsets {
     inline constexpr uintptr_t Sandboxed = 0xC5;
     inline constexpr uintptr_t ScreenGuiEnabled = 0x50D;
     inline constexpr uintptr_t ScriptContext = 0x3F0;
+    inline constexpr uintptr_t ScriptContextToIdentity = 0x1E8;
+    inline constexpr uintptr_t ScriptExtraSpace = 0x48;
     inline constexpr uintptr_t Sit = 0x1DC;
     inline constexpr uintptr_t SkyboxBk = 0x110;
     inline constexpr uintptr_t SkyboxDn = 0x140;
@@ -177,6 +180,27 @@ namespace offsets {
     inline constexpr uintptr_t Workspace = 0x178;
     inline constexpr uintptr_t WorkspaceToWorld = 0x408;
     inline constexpr uintptr_t viewmatrix = 0x130;
+    // Full capabilities bitmask to unlock all API access
+    inline constexpr uint64_t FullCapabilities = 0xFFFFFFFFFFFFFFFFULL;
+
+    // --- Luau VM API function offsets (from Roblox base address) ---
+    // These are the addresses of Roblox's internal Luau VM functions.
+    // Find them using IDA/Ghidra on the Roblox binary for your version.
+    // Search for strings like "attempt to load bytecode" (luau_load),
+    // or cross-reference the ScriptContext vtable.
+    //
+    // TODO: Fill these with real offsets for version-9d412f44a6fe4081.
+    //       Set to 0x0 until resolved -- loadstring will be skipped if any are zero.
+    inline constexpr uintptr_t LuauLoad = 0x0;            // luau_load(L, chunkname, data, size, env)
+    inline constexpr uintptr_t LuaPushCClosure = 0x0;     // lua_pushcclosurek(L, fn, debugname, nup, cont)
+    inline constexpr uintptr_t LuaSetField = 0x0;         // lua_setfield(L, idx, k)
+    inline constexpr uintptr_t LuaToLString = 0x0;        // lua_tolstring(L, idx, len)
+    inline constexpr uintptr_t LuaPushString = 0x0;       // lua_pushstring(L, s)
+    inline constexpr uintptr_t LuaGetTop = 0x0;           // lua_gettop(L)
+    inline constexpr uintptr_t LuaSetTop = 0x0;           // lua_settop(L, idx)
+    inline constexpr uintptr_t LuaPCall = 0x0;            // lua_pcall(L, nargs, nresults, errfunc)
+    inline constexpr uintptr_t LuaGetField = 0x0;         // lua_getfield(L, idx, k)
+    inline constexpr uintptr_t LuaGetGlobal = 0x0;        // lua_getglobal(L, name) -- shorthand for getfield(GLOBALSINDEX)
 }
 
 #endif
