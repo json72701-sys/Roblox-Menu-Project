@@ -1,32 +1,32 @@
-#include <UIKit/UIKit.h>
-#include <objc/runtime.h>
+#include "imgui.h"
+#include <stdio.h>
 
-// This is the "Magic Hook" that forces a label onto the Roblox screen
+// This is the variable that keeps the menu open
+bool open = true;
+
+// This is the actual Menu Function
+void RenderMenu() {
+    if (open) {
+        ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Gold Executor v1.0", &open);
+        
+        ImGui::Text("Welcome to the Menu!");
+        ImGui::Separator();
+        
+        if (ImGui::Button("Speed Hack (Active)")) {
+            // Logic goes here later
+        }
+        
+        if (ImGui::Button("Close Menu")) {
+            open = false;
+        }
+        
+        ImGui::End();
+    }
+}
+
+// This tells the iPad to wake up the code
 __attribute__((constructor))
 static void initialize() {
-    // We wait 10 seconds to make sure Roblox is fully loaded
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        
-        UIWindow *keyWindow = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                if (scene.activationState == UISceneActivationStateForegroundActive) {
-                    keyWindow = ((UIWindowScene*)scene).windows.firstObject;
-                    break;
-                }
-            }
-        } else {
-            keyWindow = [UIApplication sharedApplication].keyWindow;
-        }
-
-        // Create a simple Floating Button
-        UIButton *logoButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [logoButton setFrame:CGRectMake(100, 100, 60, 60)];
-        [logoButton setTitle:@"GOLD" forState:UIControlStateNormal];
-        [logoButton setBackgroundColor:[UIColor goldColor]];
-        [logoButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-        logoButton.layer.cornerRadius = 30; // Makes it a circle
-        
-        [keyWindow addSubview:logoButton];
-    });
+    printf("GOLD EXECUTOR: Initialized and Ready ✅\n");
 }
