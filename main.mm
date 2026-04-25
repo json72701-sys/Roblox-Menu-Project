@@ -1,17 +1,60 @@
 #import <UIKit/UIKit.h>
 
-// --- CONNECTING YOUR UD LOGIC ---
 #include "offsets.hpp"
-#include "Methods/DataModel.cpp" 
-// --------------------------------
+#include "Include/mem.hpp"
+#include "Include/base.hpp"
+#include "Methods/DataModel.hpp"
+#include "Methods/Instance.hpp"
+#include "Methods/Executor.hpp"
+#include "Structures/Player.hpp"
 
 static bool isMenuVisible = false;
+static bool isInitialized = false;
 
-// Defining this here so it's only in ONE place
+static void InitializeBase() {
+    if (isInitialized) return;
+    mem::BaseAddress = base::GetRobloxBase();
+    if (mem::BaseAddress) {
+        NSLog(@"[ElxrScriptz] Base address: %p", (void*)mem::BaseAddress);
+        isInitialized = true;
+    } else {
+        NSLog(@"[ElxrScriptz] Failed to find Roblox base address");
+    }
+}
+
 extern "C" void RenderImGuiMenu(bool visible) {
-    if (visible) {
-        uintptr_t dm = GetDataModel(); 
-        NSLog(@"[ElxrScriptz] DataModel found: %p", (void*)dm);
+    if (!visible) return;
+
+    InitializeBase();
+    if (!isInitialized) return;
+
+    uintptr_t dm = GetDataModel();
+    if (!dm) {
+        NSLog(@"[ElxrScriptz] DataModel not found");
+        return;
+    }
+    NSLog(@"[ElxrScriptz] DataModel: %p", (void*)dm);
+
+    uintptr_t players = Instance::FindFirstChild(dm, "Players");
+    if (players) {
+        uintptr_t localPlayer = Player::GetLocalPlayer(players);
+        NSLog(@"[ElxrScriptz] LocalPlayer: %p", (void*)localPlayer);
+
+        if (localPlayer) {
+            std::string playerName = Instance::GetName(localPlayer);
+            NSLog(@"[ElxrScriptz] Player: %s", playerName.c_str());
+        }
+    }
+
+    uintptr_t workspace = Instance::FindFirstChild(dm, "Workspace");
+    if (workspace) {
+        NSLog(@"[ElxrScriptz] Workspace: %p", (void*)workspace);
+    }
+
+    uintptr_t script = Executor::FindLocalScript(dm);
+    if (script) {
+        NSLog(@"[ElxrScriptz] Found LocalScript: %s", Instance::GetName(script).c_str());
+        NSLog(@"[ElxrScriptz] Executor ready");
     }
 }
 
@@ -29,13 +72,17 @@ extern "C" void RenderImGuiMenu(bool visible) {
     UITouch *touch = [touches anyObject];
     if (touch.tapCount == 1) {
         isMenuVisible = !isMenuVisible;
-        RenderImGuiMenu(isMenuVisible); 
+        RenderImGuiMenu(isMenuVisible);
     }
 }
 @end
 
 __attribute__((constructor))
 static void initialize() {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        InitializeBase();
+    });
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow *win = nil;
         for (UIWindow *window in [UIApplication sharedApplication].windows) {
@@ -45,14 +92,12 @@ static void initialize() {
         if (win) {
             DraggableLogo *btn = [DraggableLogo buttonWithType:UIButtonTypeCustom];
             [btn setFrame:CGRectMake(100, 100, 60, 60)];
-            
-            // Your Blue ELXR Logo
             [btn setTitle:@"ELXR" forState:UIControlStateNormal];
-            [btn setBackgroundColor:[UIColor blueColor]]; 
-            
+            [btn setBackgroundColor:[UIColor blueColor]];
             btn.layer.cornerRadius = 30;
             btn.layer.zPosition = 10000;
             [win addSubview:btn];
+            NSLog(@"[ElxrScriptz] Menu loaded");
         }
     });
 }

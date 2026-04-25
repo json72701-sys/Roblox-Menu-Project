@@ -8,22 +8,26 @@ jobs:
       - name: Compile for iOS
         run: |
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          
-          # This command finds EVERY .cpp and .mm file in your project
-          find . -name "*.cpp" > files.txt
-          find . -name "*.mm" >> files.txt
-          
+
           clang++ -dynamiclib -arch arm64 \
           -isysroot "$SDK_PATH" \
           -miphoneos-version-min=14.0 \
           -I. \
-          -I./imgui \
+          -I./Include \
+          -I./Methods \
+          -I./Structures \
           -framework UIKit \
           -framework Metal \
           -framework Foundation \
           -framework QuartzCore \
           -std=c++17 \
-          -o MyExecutor.dylib $(cat files.txt)
+          -fobjc-arc \
+          -o MyExecutor.dylib \
+          main.mm \
+          imgui.cpp \
+          imgui_draw.cpp \
+          imgui_tables.cpp \
+          imgui_widgets.cpp
       - name: Save Result
         uses: actions/upload-artifact@v4
         with:

@@ -11,8 +11,8 @@ namespace mem {
     template <typename T>
     T read(uintptr_t address) {
         T buffer;
-        // mach_vm_read is the "stealthy" way to read memory on iOS
-        if (vm_read_overwrite(mach_task_self(), address, sizeof(T), (pointer_t)&buffer, new mach_msg_type_number_t()) == KERN_SUCCESS) {
+        vm_size_t outsize = sizeof(T);
+        if (vm_read_overwrite(mach_task_self(), address, sizeof(T), (pointer_t)&buffer, &outsize) == KERN_SUCCESS) {
             return buffer;
         }
         return T();
