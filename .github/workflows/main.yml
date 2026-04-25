@@ -1,0 +1,17 @@
+name: Build Executor
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Compile for iOS
+        run: |
+          clang++ -dynamiclib -arch arm64 \
+          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+          -o MyExecutor.dylib *.cpp
+      - name: Save Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: Final-Executor
+          path: MyExecutor.dylib
