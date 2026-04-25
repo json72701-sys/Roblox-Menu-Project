@@ -1,32 +1,44 @@
-#import <UIKit/UIKit.h>
-#include <stdio.h>
+#include "imgui.h"
+#include <string>
 
-@interface MenuButton : UIButton
-@end
+// Variables to track the menu state
+bool show_menu = false;
+static char script_buffer[99999] = ""; // This holds your pasted script
 
-@implementation MenuButton
-// This makes the button draggable later if you want!
-@end
+void RenderUI() {
+    // 1. THE FLOATING BUTTON [G]
+    ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Toggle", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground);
+    if (ImGui::Button("[G]", ImVec2(50, 50))) {
+        show_menu = !show_menu; // Clicking the G opens/closes the menu
+    }
+    ImGui::End();
 
-__attribute__((constructor))
-static void initialize() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = nil;
-        for (UIWindow *window in [UIApplication sharedApplication].windows) {
-            if (window.isKeyWindow) {
-                keyWindow = window;
-                break;
-            }
+    // 2. THE MAIN EXECUTOR MENU
+    if (show_menu) {
+        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Gold Executor v1.0", &show_menu);
+
+        ImGui::Text("Paste your script below:");
+        
+        // The Script Input Box
+        ImGui::InputTextMultiline("##ScriptBox", script_buffer, IM_ARRAYSIZE(script_buffer), ImVec2(-FLT_MIN, 180));
+
+        ImGui::Separator();
+
+        // The Execute Button
+        if (ImGui::Button("EXECUTE", ImVec2(120, 40))) {
+            // This is where the Lua injection happens
+            // For now, it will just clear the box to show it "sent"
+            printf("Executing: %s\n", script_buffer);
         }
 
-        UIButton *goldButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        goldButton.frame = CGRectMake(100, 100, 60, 60);
-        goldButton.backgroundColor = [UIColor orangeColor]; // Gold-ish
-        goldButton.layer.cornerRadius = 30;
-        [goldButton setTitle:@"G" forState:UIControlStateNormal];
-        goldButton.layer.zPosition = 10000;
-        
-        [keyWindow addSubview:goldButton];
-        printf("Gold Menu Button Injected! ✅\n");
-    });
+        ImGui::SameLine();
+
+        if (ImGui::Button("Clear", ImVec2(80, 40))) {
+            memset(script_buffer, 0, sizeof(script_buffer));
+        }
+
+        ImGui::End();
+    }
 }
