@@ -21,9 +21,9 @@ namespace Instance {
         if (!strAddr) return "";
 
         char buf[257] = {};
-        vm_size_t outSize = 0;
-        if (vm_read_overwrite(mach_task_self(), strAddr, nameLen,
-                              (pointer_t)buf, &outSize) != KERN_SUCCESS) {
+        vm_size_t outSize = (vm_size_t)nameLen;
+        if (vm_read_overwrite(mach_task_self(), (vm_address_t)strAddr, (vm_size_t)nameLen,
+                              (vm_address_t)buf, &outSize) != KERN_SUCCESS) {
             return "";
         }
         return std::string(buf, nameLen);
@@ -42,9 +42,9 @@ namespace Instance {
         if (!strAddr) return "";
 
         char buf[257] = {};
-        vm_size_t outSize = 0;
-        if (vm_read_overwrite(mach_task_self(), strAddr, nameLen,
-                              (pointer_t)buf, &outSize) != KERN_SUCCESS) {
+        vm_size_t outSize = (vm_size_t)nameLen;
+        if (vm_read_overwrite(mach_task_self(), (vm_address_t)strAddr, (vm_size_t)nameLen,
+                              (vm_address_t)buf, &outSize) != KERN_SUCCESS) {
             return "";
         }
         return std::string(buf, nameLen);

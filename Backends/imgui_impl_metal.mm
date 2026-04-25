@@ -2,7 +2,7 @@
 #import "../imgui.h"
 
 #import <Metal/Metal.h>
-#import <time.h>
+#import <QuartzCore/QuartzCore.h>
 
 #pragma mark - Metal rendering state
 
@@ -153,8 +153,9 @@ void ImGui_ImplMetal_RenderDrawData(ImDrawData* drawData,
                 scissor.height = (NSUInteger)(ch - cy);
                 [commandEncoder setScissorRect:scissor];
 
-                if (pcmd->TextureId) {
-                    [commandEncoder setFragmentTexture:(__bridge id<MTLTexture>)(pcmd->TextureId)
+                ImTextureID texId = pcmd->GetTexID();
+                if (texId) {
+                    [commandEncoder setFragmentTexture:(__bridge id<MTLTexture>)(texId)
                                                atIndex:0];
                 }
                 [commandEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle

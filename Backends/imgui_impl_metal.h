@@ -4,7 +4,8 @@
 #include "../imgui.h"
 
 #ifdef __OBJC__
-@protocol MTLDevice, MTLRenderCommandEncoder, MTLCommandBuffer;
+#import <Metal/Metal.h>
+#import <QuartzCore/QuartzCore.h>
 
 bool     ImGui_ImplMetal_Init(id<MTLDevice> device);
 void     ImGui_ImplMetal_Shutdown();
