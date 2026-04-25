@@ -301,6 +301,18 @@ static void DrawMenu() {
 }
 
 static void RenderFrame() {
+    UIWindow *window = GetKeyWindow();
+    if (window) {
+        CGRect bounds = [UIScreen mainScreen].bounds;
+        g_metalLayer.frame = bounds;
+        ImGuiIO &io = ImGui::GetIO();
+        io.DisplaySize = ImVec2(bounds.size.width, bounds.size.height);
+        io.DisplayFramebufferScale = ImVec2(
+            (float)[UIScreen mainScreen].scale,
+            (float)[UIScreen mainScreen].scale
+        );
+    }
+
     id<CAMetalDrawable> drawable = [g_metalLayer nextDrawable];
     if (!drawable)
         return;
