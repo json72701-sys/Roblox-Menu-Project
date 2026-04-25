@@ -142,12 +142,21 @@ static void InitImGui() {
     g_initialized = true;
 }
 
+static bool g_needsCenter = true;
+
 static void DrawMenu() {
-    ImGui::SetNextWindowSize(ImVec2(340, 440), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(
-        ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f),
-        ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f)
-    );
+    const float winW = 340.0f;
+    const float winH = 440.0f;
+
+    if (g_needsCenter) {
+        ImVec2 display = ImGui::GetIO().DisplaySize;
+        ImGui::SetNextWindowPos(
+            ImVec2((display.x - winW) * 0.5f, (display.y - winH) * 0.5f),
+            ImGuiCond_Always
+        );
+        ImGui::SetNextWindowSize(ImVec2(winW, winH), ImGuiCond_Always);
+        g_needsCenter = false;
+    }
 
     ImGui::Begin("ElxrScriptz Executor", nullptr,
                  ImGuiWindowFlags_NoCollapse);
