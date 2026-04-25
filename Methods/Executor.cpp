@@ -74,9 +74,9 @@ static uintptr_t FindFirstChildOfClass(uintptr_t instance, const char* className
                 uintptr_t namePtr = mem::read<uintptr_t>(classDesc + offsets::ClassDescriptorToClassName);
                 if (namePtr) {
                     char nameBuf[64] = {0};
-                    vm_size_t outSize = 0;
+                    vm_size_t outSize = sizeof(nameBuf) - 1;
                     vm_read_overwrite(mach_task_self(), namePtr, sizeof(nameBuf) - 1,
-                                      (pointer_t)nameBuf, (mach_msg_type_number_t*)&outSize);
+                                      (pointer_t)nameBuf, &outSize);
                     if (strcmp(nameBuf, className) == 0)
                         return child;
                 }
