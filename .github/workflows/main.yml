@@ -15,10 +15,12 @@ jobs:
 
       - name: Compile Dylib
         run: |
-          # Use the default SDK path available on the runner
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # Compiling with standard flags for iOS arm64
+          # Automatically find all source files in all folders
+          find . -name "*.cpp" > files.txt
+          find . -name "*.mm" >> files.txt
+          
           clang++ -dynamiclib -arch arm64 \
             -isysroot "$SDK_PATH" \
             -miphoneos-version-min=14.0 \
@@ -31,10 +33,10 @@ jobs:
             -framework QuartzCore \
             -std=c++17 \
             -o MyExecutor.dylib \
-            *.mm *.cpp imgui/*.cpp 2>/dev/null || clang++ -dynamiclib -arch arm64 -isysroot "$SDK_PATH" -miphoneos-version-min=14.0 -I. -framework UIKit -framework Foundation -framework Metal -framework MetalKit -framework QuartzCore -std=c++17 -o MyExecutor.dylib *.mm *.cpp
+            $(cat files.txt)
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Final-Executor-Dylib
+          name: Final-Executor
           path: MyExecutor.dylib
