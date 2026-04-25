@@ -1,6 +1,9 @@
+#ifndef OFFSETS_H
+#define OFFSETS_H
+
 #include <cstdint>
+
 // Roblox Version: version-9d412f44a6fe4081
-// Byfron Version: ???
 namespace offsets {
     inline constexpr uintptr_t Adornee = 0xD0;
     inline constexpr uintptr_t Anchored = 0x1AE;
@@ -175,3 +178,5 @@ namespace offsets {
     inline constexpr uintptr_t WorkspaceToWorld = 0x408;
     inline constexpr uintptr_t viewmatrix = 0x130;
 }
+
+#endif
