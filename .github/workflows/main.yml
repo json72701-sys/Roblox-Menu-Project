@@ -10,12 +10,10 @@ jobs:
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           clang++ -dynamiclib -arch arm64 \
           -isysroot "$SDK_PATH" \
+          -x objective-c++ \
           -framework UIKit \
-          -framework Metal \
           -framework Foundation \
-          -framework QuartzCore \
-          -std=c++17 -stdlib=libc++ \
-          -o MyExecutor.dylib *.mm
+          -o MyExecutor.dylib main.mm
       - name: Save Result
         uses: actions/upload-artifact@v4
         with:
