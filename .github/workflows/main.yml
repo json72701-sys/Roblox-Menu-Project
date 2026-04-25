@@ -16,8 +16,8 @@ jobs:
           clang++ -dynamiclib -arch arm64 \
           -isysroot "$SDK_PATH" \
           -miphoneos-version-min=14.0 \
+          -fobjc-arc \
           -I. \
-          -I./imgui \
           -framework UIKit \
           -framework Metal \
           -framework Foundation \
