@@ -1,28 +1,25 @@
 #import <UIKit/UIKit.h>
 
-// This links your button to your ImGui menu code
+// This tells the compiler that your ImGui menu exists in another file
 extern "C" void RenderImGuiMenu(bool visible);
 
 static bool isMenuVisible = false;
 
-// Custom class to handle dragging
 @interface DraggableLogo : UIButton
 @end
 
 @implementation DraggableLogo
-// Updates position when you drag
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *touch = [touches anyObject];
     CGPoint currentLocation = [touch locationInView:self.superview];
-    self.center = currentLocation;
+    self.center = currentLocation; // Handles the dragging
 }
 
-// Toggles the menu when you tap
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *touch = [touches anyObject];
     if (touch.tapCount == 1) {
         isMenuVisible = !isMenuVisible;
-        RenderImGuiMenu(isMenuVisible);
+        RenderImGuiMenu(isMenuVisible); // Toggles the menu
     }
 }
 @end
