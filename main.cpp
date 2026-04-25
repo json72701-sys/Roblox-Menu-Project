@@ -1,20 +1,18 @@
-name: Build Executor
-on: [push, workflow_dispatch]
-jobs:
-  build:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compile for iOS
-        run: |
-          clang++ -dynamiclib -arch arm64 \
-          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -framework Frameworks/UIKit.framework \
-          -framework Frameworks/Metal.framework \
-          -framework Frameworks/QuartzCore.framework \
-          -o MyExecutor.dylib *.cpp
-      - name: Save Result
-        uses: actions/upload-artifact@v4
-        with:
-          name: Final-Executor
-          path: MyExecutor.dylib
+#include <UIKit/UIKit.h>
+
+// This is the "Automatic Trigger"
+__attribute__((constructor))
+static void initialize() {
+    // We wait 5 seconds to make sure Roblox is fully open
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
+        // This creates a standard iPad Alert box
+        UIViewController *root = [UIApplication sharedApplication].keyWindow.rootViewController;
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Gold Executor" 
+                                    message:@"Menu Loaded Successfully! ✅" 
+                                    preferredStyle:UIAlertControllerStyleAlert];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [root presentViewController:alert animated:YES completion:nil];
+    });
+}
