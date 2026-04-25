@@ -1,11 +1,14 @@
+#include "DataModel.hpp"
+#include "../Include/mem.hpp"
 #include "../offsets.hpp"
 
-// This function follows the pointers to find the game's core
 uintptr_t GetDataModel() {
-    // mem::BaseAddress is the start of the Roblox app
-    uintptr_t VisualEngine = *(uintptr_t*)(0x100000000 + offsets::VisualEnginePointer); 
-    uintptr_t DataModelPointer = *(uintptr_t*)(VisualEngine + offsets::VisualEngineToDataModel1);
-    uintptr_t DataModel = *(uintptr_t*)(DataModelPointer + offsets::VisualEngineToDataModel2);
-    
-    return DataModel;
+    uintptr_t visualEngine = mem::read<uintptr_t>(0x100000000 + offsets::VisualEnginePointer);
+    if (!visualEngine) return 0;
+
+    uintptr_t dataModelPtr = mem::read<uintptr_t>(visualEngine + offsets::VisualEngineToDataModel1);
+    if (!dataModelPtr) return 0;
+
+    uintptr_t dataModel = mem::read<uintptr_t>(dataModelPtr + offsets::VisualEngineToDataModel2);
+    return dataModel;
 }

@@ -5,17 +5,23 @@
 #include <vector>
 
 namespace mem {
-    // This finds where Roblox is sitting in your iPad's RAM
     inline uintptr_t BaseAddress = 0;
 
     template <typename T>
     T read(uintptr_t address) {
-        T buffer;
-        // mach_vm_read is the "stealthy" way to read memory on iOS
-        if (vm_read_overwrite(mach_task_self(), address, sizeof(T), (pointer_t)&buffer, new mach_msg_type_number_t()) == KERN_SUCCESS) {
+        T buffer{};
+        vm_size_t outSize = sizeof(T);
+        if (vm_read_overwrite(mach_task_self(), (vm_address_t)address, sizeof(T),
+                              (vm_address_t)&buffer, &outSize) == KERN_SUCCESS) {
             return buffer;
         }
-        return T();
+        return T{};
+    }
+
+    template <typename T>
+    bool write(uintptr_t address, T value) {
+        return vm_write(mach_task_self(), (vm_address_t)address,
+                        (vm_offset_t)&value, sizeof(T)) == KERN_SUCCESS;
     }
 }
 
