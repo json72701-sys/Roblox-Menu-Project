@@ -7,7 +7,7 @@ TWEAK_NAME = ElxrScriptz
 
 # Added Methods/DataModel.cpp so your Execute logic actually compiles
 # Removed Menu.cpp because we put that code inside main.mm
-ElxrScriptz_FILES = main.mm Methods/DataModel.cpp
+ElxrScriptz_FILES = main.mm
 ElxrScriptz_FRAMEWORKS = UIKit Foundation Security
 ElxrScriptz_CFLAGS = -fobjc-arc -I./Include -I./Methods -I./Structures
 
