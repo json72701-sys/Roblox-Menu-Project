@@ -6,12 +6,13 @@
 #include "imgui_impl_metal.h"
 
 static bool g_initialized = false;
+static bool g_menuVisible = false;
 static id<MTLDevice> g_device = nil;
 static id<MTLCommandQueue> g_commandQueue = nil;
 static CAMetalLayer *g_metalLayer = nil;
 static MTLRenderPassDescriptor *g_renderPassDescriptor = nil;
+static CADisplayLink *g_displayLink = nil;
 
-// Script execution hook — connect your script engine here
 typedef void (*ScriptExecFunc)(const char *script);
 static ScriptExecFunc g_scriptExecCallback = nullptr;
 
@@ -38,60 +39,48 @@ static void SetupImGuiStyle() {
 
     ImVec4 *c = style.Colors;
 
-    // Background
     c[ImGuiCol_WindowBg]   = ImVec4(0.06f, 0.06f, 0.12f, 0.97f);
     c[ImGuiCol_ChildBg]    = ImVec4(0.08f, 0.08f, 0.14f, 0.90f);
     c[ImGuiCol_PopupBg]    = ImVec4(0.08f, 0.08f, 0.14f, 0.97f);
 
-    // Title bar
     c[ImGuiCol_TitleBg]       = ImVec4(0.10f, 0.20f, 0.40f, 1.00f);
     c[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.35f, 0.65f, 1.00f);
 
-    // Borders
     c[ImGuiCol_Border]        = ImVec4(0.25f, 0.50f, 0.85f, 0.40f);
     c[ImGuiCol_BorderShadow]  = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 
-    // Buttons
     c[ImGuiCol_Button]        = ImVec4(0.15f, 0.35f, 0.65f, 0.85f);
     c[ImGuiCol_ButtonHovered]  = ImVec4(0.25f, 0.50f, 0.85f, 1.00f);
     c[ImGuiCol_ButtonActive]   = ImVec4(0.10f, 0.30f, 0.55f, 1.00f);
 
-    // Frames (input fields)
     c[ImGuiCol_FrameBg]        = ImVec4(0.10f, 0.10f, 0.18f, 0.90f);
     c[ImGuiCol_FrameBgHovered] = ImVec4(0.15f, 0.15f, 0.25f, 1.00f);
     c[ImGuiCol_FrameBgActive]  = ImVec4(0.12f, 0.12f, 0.22f, 1.00f);
 
-    // Tabs
     c[ImGuiCol_Tab]                = ImVec4(0.12f, 0.25f, 0.45f, 0.80f);
     c[ImGuiCol_TabSelected]        = ImVec4(0.20f, 0.45f, 0.80f, 1.00f);
     c[ImGuiCol_TabHovered]         = ImVec4(0.25f, 0.50f, 0.85f, 0.90f);
     c[ImGuiCol_TabDimmed]          = ImVec4(0.08f, 0.15f, 0.30f, 0.70f);
     c[ImGuiCol_TabDimmedSelected]  = ImVec4(0.15f, 0.30f, 0.55f, 1.00f);
 
-    // Sliders / Grabs
     c[ImGuiCol_SliderGrab]       = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
     c[ImGuiCol_SliderGrabActive] = ImVec4(0.40f, 0.65f, 1.00f, 1.00f);
 
-    // Checkmark
     c[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.75f, 1.00f, 1.00f);
 
-    // Scrollbar
     c[ImGuiCol_ScrollbarBg]          = ImVec4(0.05f, 0.05f, 0.10f, 0.50f);
     c[ImGuiCol_ScrollbarGrab]        = ImVec4(0.20f, 0.40f, 0.70f, 0.60f);
     c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.25f, 0.50f, 0.85f, 0.80f);
     c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
 
-    // Header (collapsing headers, selectable)
     c[ImGuiCol_Header]        = ImVec4(0.15f, 0.30f, 0.55f, 0.70f);
     c[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.40f, 0.70f, 0.80f);
     c[ImGuiCol_HeaderActive]  = ImVec4(0.25f, 0.50f, 0.85f, 1.00f);
 
-    // Separator
     c[ImGuiCol_Separator]        = ImVec4(0.20f, 0.40f, 0.70f, 0.40f);
     c[ImGuiCol_SeparatorHovered] = ImVec4(0.25f, 0.50f, 0.85f, 0.70f);
     c[ImGuiCol_SeparatorActive]  = ImVec4(0.30f, 0.55f, 0.90f, 1.00f);
 
-    // Text
     c[ImGuiCol_Text]         = ImVec4(0.90f, 0.93f, 1.00f, 1.00f);
     c[ImGuiCol_TextDisabled] = ImVec4(0.45f, 0.50f, 0.60f, 1.00f);
 }
@@ -103,6 +92,8 @@ static UIWindow *GetKeyWindow() {
     }
     return nil;
 }
+
+static void RenderFrame();
 
 static void InitImGui() {
     if (g_initialized)
@@ -118,26 +109,42 @@ static void InitImGui() {
     if (!window)
         return;
 
+    CGFloat scale = [UIScreen mainScreen].scale;
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+
     g_metalLayer = [CAMetalLayer layer];
     g_metalLayer.device = g_device;
     g_metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     g_metalLayer.framebufferOnly = YES;
-    g_metalLayer.frame = window.bounds;
+    g_metalLayer.frame = screenBounds;
+    g_metalLayer.contentsScale = scale;
+    g_metalLayer.drawableSize = CGSizeMake(
+        screenBounds.size.width * scale,
+        screenBounds.size.height * scale
+    );
     g_metalLayer.opaque = NO;
+    g_metalLayer.hidden = YES;
     [window.rootViewController.view.layer addSublayer:g_metalLayer];
 
     g_renderPassDescriptor = [MTLRenderPassDescriptor new];
 
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(window.bounds.size.width, window.bounds.size.height);
-    io.DisplayFramebufferScale = ImVec2(
-        (float)[UIScreen mainScreen].scale,
-        (float)[UIScreen mainScreen].scale
-    );
+    io.IniFilename = nullptr;
+    io.DisplaySize = ImVec2(screenBounds.size.width, screenBounds.size.height);
+    io.DisplayFramebufferScale = ImVec2((float)scale, (float)scale);
+
+    NSLog(@"[ElxrScriptz] Screen: %.0fx%.0f scale:%.0f",
+          screenBounds.size.width, screenBounds.size.height, scale);
 
     ImGui_ImplMetal_Init(g_device);
     SetupImGuiStyle();
+
+    g_displayLink = [CADisplayLink displayLinkWithTarget:[NSBlockOperation blockOperationWithBlock:^{
+        if (g_menuVisible)
+            RenderFrame();
+    }] selector:@selector(main)];
+    [g_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 
     g_initialized = true;
 }
@@ -152,10 +159,11 @@ static void DrawMenu() {
     if (winH > 440.0f) winH = 440.0f;
 
     if (g_needsCenter) {
-        ImGui::SetNextWindowPos(
-            ImVec2((display.x - winW) * 0.5f, (display.y - winH) * 0.5f),
-            ImGuiCond_Always
-        );
+        float posX = (display.x - winW) * 0.5f;
+        float posY = (display.y - winH) * 0.5f;
+        if (posX < 0) posX = 10;
+        if (posY < 0) posY = 10;
+        ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(winW, winH), ImGuiCond_Always);
         g_needsCenter = false;
     }
@@ -169,14 +177,15 @@ static void DrawMenu() {
 
     if (ImGui::BeginTabBar("##Tabs", ImGuiTabBarFlags_FittingPolicyResizeDown)) {
 
-        // --- Execute Tab ---
         if (ImGui::BeginTabItem("Execute")) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Paste or type your script:");
             ImGui::Spacing();
 
+            float textBoxH = ImGui::GetContentRegionAvail().y - 80;
+            if (textBoxH < 100) textBoxH = 100;
             ImGui::InputTextMultiline("##scriptbox", scriptBuf, sizeof(scriptBuf),
-                                      ImVec2(-1, 220),
+                                      ImVec2(-1, textBoxH),
                                       ImGuiInputTextFlags_AllowTabInput);
 
             ImGui::Spacing();
@@ -232,7 +241,6 @@ static void DrawMenu() {
             ImGui::EndTabItem();
         }
 
-        // --- Settings Tab ---
         if (ImGui::BeginTabItem("Settings")) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Player Settings");
@@ -271,7 +279,6 @@ static void DrawMenu() {
             ImGui::EndTabItem();
         }
 
-        // --- Info Tab ---
         if (ImGui::BeginTabItem("Info")) {
             ImGui::Spacing();
 
@@ -301,17 +308,17 @@ static void DrawMenu() {
 }
 
 static void RenderFrame() {
-    UIWindow *window = GetKeyWindow();
-    if (window) {
-        CGRect bounds = [UIScreen mainScreen].bounds;
-        g_metalLayer.frame = bounds;
-        ImGuiIO &io = ImGui::GetIO();
-        io.DisplaySize = ImVec2(bounds.size.width, bounds.size.height);
-        io.DisplayFramebufferScale = ImVec2(
-            (float)[UIScreen mainScreen].scale,
-            (float)[UIScreen mainScreen].scale
-        );
-    }
+    CGFloat scale = [UIScreen mainScreen].scale;
+    CGRect screenBounds = [UIScreen mainScreen].bounds;
+    g_metalLayer.frame = screenBounds;
+    g_metalLayer.contentsScale = scale;
+    g_metalLayer.drawableSize = CGSizeMake(
+        screenBounds.size.width * scale,
+        screenBounds.size.height * scale
+    );
+    ImGuiIO &io = ImGui::GetIO();
+    io.DisplaySize = ImVec2(screenBounds.size.width, screenBounds.size.height);
+    io.DisplayFramebufferScale = ImVec2((float)scale, (float)scale);
 
     id<CAMetalDrawable> drawable = [g_metalLayer nextDrawable];
     if (!drawable)
@@ -342,17 +349,15 @@ static void RenderFrame() {
 
 extern "C" void RenderImGuiMenu(bool visible) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (!visible) {
-            if (g_metalLayer)
-                g_metalLayer.hidden = YES;
-            return;
-        }
-
         InitImGui();
+        g_menuVisible = visible;
         if (g_initialized) {
-            g_metalLayer.hidden = NO;
-            g_needsCenter = true;
-            RenderFrame();
+            if (visible) {
+                g_metalLayer.hidden = NO;
+                g_needsCenter = true;
+            } else {
+                g_metalLayer.hidden = YES;
+            }
         }
     });
 }
