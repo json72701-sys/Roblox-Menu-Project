@@ -1,41 +1,30 @@
-name: Build iOS Executor
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
+name: Build Executor
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Compile Dylib
+      - uses: actions/checkout@v4
+      - name: Compile for iOS
         run: |
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # Automatically find all source files in all folders
+          # This command finds EVERY .cpp and .mm file in your project
           find . -name "*.cpp" > files.txt
           find . -name "*.mm" >> files.txt
           
           clang++ -dynamiclib -arch arm64 \
-            -isysroot "$SDK_PATH" \
-            -miphoneos-version-min=14.0 \
-            -I. \
-            -I./imgui \
-            -framework UIKit \
-            -framework Foundation \
-            -framework Metal \
-            -framework MetalKit \
-            -framework QuartzCore \
-            -std=c++17 \
-            -o MyExecutor.dylib \
-            $(cat files.txt)
-
-      - name: Upload Artifact
+          -isysroot "$SDK_PATH" \
+          -miphoneos-version-min=14.0 \
+          -I. \
+          -I./imgui \
+          -framework UIKit \
+          -framework Metal \
+          -framework Foundation \
+          -framework QuartzCore \
+          -std=c++17 \
+          -o MyExecutor.dylib $(cat files.txt)
+      - name: Save Result
         uses: actions/upload-artifact@v4
         with:
           name: Final-Executor
