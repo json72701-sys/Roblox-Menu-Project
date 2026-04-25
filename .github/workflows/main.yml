@@ -5,11 +5,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compile
+      - name: Compile for iOS
         run: |
           clang++ -dynamiclib -arch arm64 \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -o MyExecutor.dylib *.cpp
+          -framework UIKit -framework Foundation -framework CoreGraphics \
+          -o MyExecutor.dylib main.mm
       - name: Save Result
         uses: actions/upload-artifact@v4
         with:
