@@ -1,3 +1,4 @@
+#include <cstdint>
 // Roblox Version: version-9d412f44a6fe4081
 // Byfron Version: ???
 namespace offsets {
